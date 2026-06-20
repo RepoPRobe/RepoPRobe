@@ -2,6 +2,7 @@ import { Webhooks } from '@octokit/webhooks';
 import express from 'express';
 import dotenv from "dotenv";
 import { githubApp } from './github/client.js';
+import connectDB from './db/index.js';
 dotenv.config();
 
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
@@ -30,6 +31,31 @@ server.post("/webhook", express.raw({ type: 'application/json' }), async (req, r
     res.status(200).send('ok');
 });
 
+webhooks.on("installation.created", async ({ payload }) => {
+    console.log("Installation Created");
+    console.dir(payload, { depth: null, colors: true });
+});
+
+webhooks.on("installation.deleted", async ({ payload }) => {
+    console.log("Installation Deleted");
+    console.dir(payload, { depth: null, colors: true });
+
+});
+
+// Purpose: when we update our app permissions and user accepts it, this hook will be triggered
+// webhooks.on("installation.new_permissions_accepted", async ({ payload }) => {
+// });
+
+webhooks.on("installation.suspend", async ({ payload }) => {
+    console.log("Installation Suspended");
+    console.dir(payload, { depth: null, colors: true });
+});
+
+webhooks.on("installation.unsuspend", async ({ payload }) => {
+    console.log("Installation Unsuspended");
+    console.dir(payload, { depth: null, colors: true });
+});
+
 webhooks.on("issue_comment.created", async ({ payload }) => {
     if (!payload.comment.body.includes("@RepoPRobe")) return;
 
@@ -44,4 +70,8 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
     })
 })
 
-server.listen(PORT, () => console.log(`Listening to port ${PORT}`));
+async function main() {
+    await connectDB();
+    server.listen(PORT, () => console.log(`Listening to port ${PORT}`));
+}
+main();
