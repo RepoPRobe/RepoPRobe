@@ -1,4 +1,3 @@
-
 import { App, Octokit } from 'octokit'
 import dotenv from 'dotenv'
 dotenv.config()
@@ -16,7 +15,6 @@ if (!privateKey) {
 if (!webhookSecret) {
     throw new Error("GITHUB_WEBHOOK_SECRET env not set !!");
 }
-
 
 export const githubApp = new App({
     appId,
