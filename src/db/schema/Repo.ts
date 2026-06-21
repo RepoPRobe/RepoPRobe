@@ -1,23 +1,14 @@
 import { Schema, model } from "mongoose";
 
-const UserSchema = {
-    id: String,
-    login: String, // username
-    avatarUrl: String,
-    githubUrl: String,
-    type: String,
-};
-
 const repoSchema = new Schema({
-    installationId: String,
-    ownedBy: UserSchema,
-    installedOn: Date,
-    lastUpdatedAt: Date,
-    githubId: String,
-    githubName: String,
-    githubFullName: String, // includes user name also: username/repo-name
-    isPrivate: Boolean,
-    installedBy: UserSchema,
-});
+    installationId: { type: Schema.Types.ObjectId, ref: 'GithubInstallation', required: true },
+    installedOn: { type: Date, required: false, default: null },
+    githubId: { type: String, required: true },
+    githubName: { type: String, required: true },
+    githubFullName: { type: String, required: true }, // includes user name also: username/repo-name
+    deletedAt: { type: Date, required: false, default: null },
+}, { timestamps: true });
+
+repoSchema.index({ installationId: 1, githubId: 1 }, { unique: true });
 
 export const Repo = model("Repo", repoSchema);
