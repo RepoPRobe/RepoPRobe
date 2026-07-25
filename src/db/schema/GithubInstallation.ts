@@ -1,7 +1,26 @@
-import { Schema, model } from "mongoose";
-import { UserSchema } from "../common";
+import { Schema, model, Types } from "mongoose";
+import { UserSchema, UserType } from "../common";
 
-const githubInstallationSchema = new Schema({
+export interface GithubInstallationType {
+    _id: Types.ObjectId;
+    installationId: string;
+    ownedBy?: UserType | null;
+    githubRedirect: string;
+    target: {
+        id: string;
+        accountType: string;
+    };
+    installedBy?: UserType | null;
+    suspendedAt?: Date | null;
+    installedOn?: Date | null;
+    deletedAt?: Date | null;
+    lastUpdatedAt?: Date | null;
+    repositorySelection: "all" | "selected";
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+const githubInstallationSchema = new Schema<GithubInstallationType>({
     installationId: { type: String, required: true, unique: true },
     ownedBy: { type: UserSchema, required: false },
     githubRedirect: { type: String, required: true },
@@ -20,4 +39,4 @@ const githubInstallationSchema = new Schema({
     repositorySelection: { type: String, enum: ["all", "selected"], required: true },
 }, { timestamps: true });
 
-export const GithubInstallation = model("GithubInstallation", githubInstallationSchema);
+export const GithubInstallation = model<GithubInstallationType>("GithubInstallation", githubInstallationSchema);

@@ -1,6 +1,26 @@
-import { model, Schema } from "mongoose"
+import { model, Schema, Types } from "mongoose";
+import { AllowedAuthorAssociations } from "../../utils/common";
 
-const repoConfigSchema = new Schema({
+export interface InactivityThresholdType {
+    value: number;
+    unit: 'minutes' | 'hours' | 'days';
+}
+
+export interface RepoConfigType {
+    _id: Types.ObjectId;
+    repoId: Types.ObjectId;
+    autoTrack: boolean;
+    ignoreDraftPRs: boolean;
+    excludeLabels: string[];
+    excludeFilePatterns: string[];
+    sameBaseBranchOnly: boolean;
+    inactivityThreshold: InactivityThresholdType;
+    allowed_author_assoication: string[];
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+const repoConfigSchema = new Schema<RepoConfigType>({
     repoId: { type: Schema.Types.ObjectId, ref: 'Repo', required: true },
     autoTrack: { type: Boolean, default: true },
     ignoreDraftPRs: { type: Boolean, default: true },
@@ -11,6 +31,11 @@ const repoConfigSchema = new Schema({
         value: { type: Number, default: 14 },
         unit: { type: String, enum: ['minutes', 'hours', 'days'], default: 'days' }
     },
-}, { timestamps: true })
+    allowed_author_assoication: {
+        type: [String],
+        enum: AllowedAuthorAssociations,
+        default: () => [...AllowedAuthorAssociations],
+    }
+}, { timestamps: true });
 
-export const RepoConfig = model("RepoConfig", repoConfigSchema);
+export const RepoConfig = model<RepoConfigType>('RepoConfig', repoConfigSchema);

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "queue:all": "tsx src/worker.ts"
   },
   "type": "module",
   "keywords": [],
@@ -11,14 +12,19 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@bull-board/api": "^8.6.1",
+    "@bull-board/express": "^8.6.1",
+    "bullmq": "^5.81.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "ioredis": "^5.11.1",
     "mongoose": "^9.7.1",
     "octokit": "^5.0.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.3",
+    "smee-client": "^5.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
