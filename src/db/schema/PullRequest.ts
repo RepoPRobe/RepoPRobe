@@ -1,7 +1,43 @@
-import { Schema, model, Types } from "mongoose";
-import { UserSchema } from "../common";
+import { Schema, model, Types } from 'mongoose';
+import { UserSchema, UserType } from '../common';
 
-const pullRequestSchema = new Schema({
+export interface PullRequestLabelType {
+    id: number;
+    name: string;
+    default: boolean;
+}
+
+export interface PullRequestType {
+    _id: Types.ObjectId;
+    repoId: Types.ObjectId;
+    installationId: Types.ObjectId;
+    githubPrId: string;
+    prNumber: number;
+    title: string;
+    htmlUrl: string;
+    state: 'open' | 'closed' | 'merged';
+    isDraft: boolean;
+    baseBranch: string;
+    baseBranchHeadSha: string;
+    headBranch: string;
+    headBranchHeadSha: string;
+    author: UserType;
+    labels: PullRequestLabelType[];
+    githubCreatedAt: Date;
+    githubUpdatedAt: Date;
+    githubClosedAt?: Date | null;
+    githubMergedAt?: Date | null;
+    assignees: UserType[];
+    lastCommitAt?: Date | null;
+    isTracked: boolean;
+    processingStatus: 'pending' | 'processing' | 'completed' | 'error';
+    conflictState: 'no_conflicts' | 'conflicts_found' | 'unknown';
+    deletedAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+const pullRequestSchema = new Schema<PullRequestType>({
     /**
      * PR related fields
      */
@@ -16,6 +52,7 @@ const pullRequestSchema = new Schema({
     baseBranch: { type: String, required: true },
     baseBranchHeadSha: { type: String, required: true },
     headBranch: { type: String, required: true },
+    headBranchHeadSha: { type: String, required: true },
     author: { type: UserSchema, required: true },
     labels: {
         type: [{
@@ -32,14 +69,23 @@ const pullRequestSchema = new Schema({
 
     /**
      * System/processing related fields
-    */
-    conflictCommentId: { type: String, default: null },
+     */
     lastCommitAt: { type: Date, default: null },
     isTracked: { type: Boolean, required: true, },
-    areFilesProcessed: { type: Boolean, default: false }, // will be picked by the worker/processor
+    processingStatus: {
+        type: String,
+        enum: ['pending', 'processing', 'completed', 'error'],
+        default: 'pending',
+        required: true,
+    },
+    conflictState: {
+        type: String,
+        enum: ['no_conflicts', 'conflicts_found', 'unknown'],
+        default: 'unknown'
+    },
     deletedAt: { type: Date, default: null },
-}, { timestamps: true })
+}, { timestamps: true });
 
-pullRequestSchema.index({ repoId: 1, githubPrId: 1 }, { unique: true })
+pullRequestSchema.index({ repoId: 1, githubPrId: 1 }, { unique: true });
 
-export const PullRequest = model('PullRequest', pullRequestSchema)
+export const PullRequest = model<PullRequestType>('PullRequest', pullRequestSchema);

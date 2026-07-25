@@ -1,3 +1,5 @@
+import { HunkType } from "../../db/schema/PullRequestFile";
+
 type Line = {
     type: 'context';
     oldFileLineNumber: number;
@@ -26,6 +28,7 @@ type Status = "added" | "removed" | "modified" | "renamed" | "copied" | "changed
 type PatchObject = {
     file: string;
     status: Status;
+    previousFilePath?: string; // available when status is 'renamed'
     hunks: Hunk[];
 }
 
@@ -38,58 +41,6 @@ type File = {
     patch?: string;
     previous_filename?: string;
 };
-
-
-// const testData: File[] = [
-//     {
-//         filename: 'gpt.js',
-//         status: 'modified',
-//         additions: 3,
-//         deletions: 1,
-//         changes: 4,
-//         patch: '@@ -2,4 +2,6 @@ function login() {\n' +
-//             '     console.log("Hello");\n' +
-//             '     console.log("Another hello");\n' +
-//             '     console.log("Last Hello");\n' +
-//             '-}\n' +
-//             '\\ No newline at end of file\n' +
-//             '+    const c = 1231;\n' +
-//             '+    const d = 412312;\n' +
-//             '+}'
-//     },
-//     {
-//         filename: 'claude.js',
-//         status: 'modified',
-//         additions: 6,
-//         deletions: 6,
-//         changes: 12,
-//         patch: '@@ -4,17 +4,17 @@ const c = 3;\n' +
-//             ' const d = 4;\n' +
-//             ' const e = 5;\n' +
-//             ' const f = 6;\n' +
-//             '-const g = 7;\n' +
-//             '+const g = 700;\n' +
-//             ' const h = 8;\n' +
-//             ' const i = 9;\n' +
-//             '-const j = 10;\n' +
-//             '+const j = 100;\n' +
-//             ' const k = 11;\n' +
-//             ' const l = 12;\n' +
-//             '-const m = 13;\n' +
-//             '+const m = 1300;\n' +
-//             ' const n = 14;\n' +
-//             ' const o = 15;\n' +
-//             ' const p = 16;\n' +
-//             '-const q = 17;\n' +
-//             '+const q = 1700;\n' +
-//             ' const r = 18;\n' +
-//             '-const s = 19;\n' +
-//             '-const t = 20;\n' +
-//             '\\ No newline at end of file\n' +
-//             '+const s = 190;\n' +
-//             '+const t = 200;'
-//     }
-// ];
 
 export function processPullRequestFiles(data: File[]) {
     const processedData: PatchObject[] = [];
@@ -127,11 +78,12 @@ export function processPullRequestFiles(data: File[]) {
  * - 'patch' is undefined → binary file or GitHub truncated it, return empty
  * - count omitted in hunk header (e.g. '-1' instead of '-1,1') → count defaults to 1
  */
-function getPatchObject(file: File) {
+function getPatchObject(file: File): PatchObject {
     if (!file.patch) {
         return {
             file: file.filename,
             status: file.status,
+            previousFilePath: file.previous_filename,
             hunks: [],
         };
     }
@@ -163,7 +115,7 @@ function getPatchObject(file: File) {
         } else if (patchLine.charAt(0) == '+') { // addition line
             addedLinesProcessed++;
 
-            const { oldFileStartLine, newFileStartLine, lines } = hunks[hunkIdx];
+            const { newFileStartLine, lines } = hunks[hunkIdx];
             lines.push({
                 type: 'added',
                 newFileLineNumber: newFileStartLine + contextLinesProcessed + addedLinesProcessed - 1,
@@ -172,7 +124,7 @@ function getPatchObject(file: File) {
         } else if (patchLine.charAt(0) == '-') { // removal/modification line
             removedLinesProcessed++;
 
-            const { oldFileStartLine, newFileStartLine, lines } = hunks[hunkIdx];
+            const { oldFileStartLine, lines } = hunks[hunkIdx];
             lines.push({
                 type: 'removed',
                 oldFileLineNumber: oldFileStartLine + contextLinesProcessed + removedLinesProcessed - 1,
@@ -194,6 +146,7 @@ function getPatchObject(file: File) {
     return {
         file: file.filename,
         status: file.status,
+        previousFilePath: file.previous_filename,
         hunks,
     } satisfies PatchObject;
 }
@@ -218,5 +171,101 @@ function parseHunkLine(hunkLine: string) {
         oldFilePatchLinesCount: parseInt(oldFileChanges[1]),
         newFileStartLine: Math.abs(parseInt(newFileChanges[0])),
         newFilePatchLinesCount: parseInt(newFileChanges[1]),
+    }
+}
+
+export function areOverlapingHunks(fileAHunk: Omit<Hunk, 'lines'>, fileBHunk: Omit<Hunk, 'lines'>): boolean {
+    function doesRangesOverlap(
+        aStart: number,
+        aEnd: number,
+        bStart: number,
+        bEnd: number,
+    ) {
+        return aStart <= bEnd && bStart <= aEnd;
+    }
+    const {
+        oldStart: fileAOldStart,
+        oldEnd: fileAOldEnd,
+        newStart: fileANewStart,
+        newEnd: fileANewEnd,
+    } = getHunkLineRange(fileAHunk);
+
+    const {
+        oldStart: fileBOldStart,
+        oldEnd: fileBOldEnd,
+        newStart: fileBNewStart,
+        newEnd: fileBNewEnd,
+    } = getHunkLineRange(fileBHunk);
+
+    /**
+     * In total 4 comparisions:
+     * A.old -> B.old
+     * A.old -> B.new
+     * A.new -> B.old
+     * A.new -> B.new
+     */
+    const isAOldOverlappingWithBOld = doesRangesOverlap(fileAOldStart, fileAOldEnd, fileBOldStart, fileBOldEnd);
+    const isAOldOverlappingWithBNew = doesRangesOverlap(fileAOldStart, fileAOldEnd, fileBNewStart, fileBNewEnd);
+    const isANewOverlappingWithBOld = doesRangesOverlap(fileANewStart, fileANewEnd, fileBOldStart, fileBOldEnd);
+    const isANewOverlappingWithBNew = doesRangesOverlap(fileANewStart, fileANewEnd, fileBNewStart, fileBNewEnd);
+
+    return (
+        isAOldOverlappingWithBOld ||
+        isAOldOverlappingWithBNew ||
+        isANewOverlappingWithBOld ||
+        isANewOverlappingWithBNew
+    );
+}
+
+export function getHunkLineRange(hunk: Omit<Hunk, 'lines'>): { oldStart: number, oldEnd: number, newStart: number, newEnd: number } {
+    return {
+        oldStart: hunk.oldFileStartLine,
+        oldEnd: hunk.oldFileStartLine + hunk.oldFilePatchLinesCount - 1,
+        newStart: hunk.newFileStartLine,
+        newEnd: hunk.newFileStartLine + hunk.newFilePatchLinesCount - 1,
+    }
+}
+
+export function getConflictingLinesFromHunks(hunkA: HunkType, hunkB: HunkType): { hasConflicts: boolean, removedLines: number[], addedLines: number[] } {
+    const conflictingRemovedLines: number[] = [];
+    const conflictingAddedLines: number[] = [];
+    const hunkBRemovedLineNumbers = new Map<number, string>();
+    const hunkBAddedLineNumbers = new Map<number, string>();
+
+    hunkB.lines.forEach(line => {
+        if (line.type === 'added' && line.newFileLineNumber) {
+            hunkBAddedLineNumbers.set(line.newFileLineNumber, line.content);
+        }
+        if (line.type === 'removed' && line.oldFileLineNumber) {
+            hunkBRemovedLineNumbers.set(line.oldFileLineNumber, line.content);
+        }
+    });
+
+    hunkA.lines.forEach(line => {
+        const addedLineNumber = line.newFileLineNumber;
+        const removedLineNumber = line.oldFileLineNumber;
+
+        if (
+            line.type === 'added'
+            && addedLineNumber
+            && hunkBAddedLineNumbers.has(addedLineNumber)
+            && hunkBAddedLineNumbers.get(addedLineNumber) !== line.content
+        ) {
+            conflictingAddedLines.push(addedLineNumber);
+        }
+        if (
+            line.type === 'removed'
+            && removedLineNumber
+            && hunkBRemovedLineNumbers.has(removedLineNumber)
+            && hunkBRemovedLineNumbers.get(removedLineNumber) !== line.content
+        ) {
+            conflictingRemovedLines.push(removedLineNumber);
+        }
+    });
+
+    return {
+        hasConflicts: conflictingRemovedLines.length > 0 || conflictingAddedLines.length > 0,
+        removedLines: conflictingRemovedLines,
+        addedLines: conflictingAddedLines,
     }
 }

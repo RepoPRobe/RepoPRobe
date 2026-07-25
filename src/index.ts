@@ -1,16 +1,15 @@
+import 'dotenv/config';
 import { Webhooks } from '@octokit/webhooks';
 import express from 'express';
-import dotenv from "dotenv";
-import { githubApp } from './github/client.js';
-import connectDB from './db/index.js';
-import { Repo } from './db/schema/Repo.js';
-import { GithubInstallation } from './db/schema/GithubInstallation.js';
-import { RepoConfig } from './db/schema/RepoConfig.js';
-import { Types } from 'mongoose';
-import { processPullRequestFiles } from './github/utils/file-patch.js';
-import { PullRequest } from './db/schema/PullRequest.js';
-import { PullRequestFile } from './db/schema/PullRequestFIle.js';
-dotenv.config();
+import { connectDB } from './db/index.js';
+import { installationQueue } from './queues/installation.queue.js';
+import { QUEUE_EVENTS } from './types/queue-events.js';
+import { CommentCheck, CommentHelp, CommentInvalidCommand, CommentStatus, CommentTrack, CommentUntrack, InstallationCreated, InstallationDeleted, InstallationRepositoriesAdded, InstallationRepositoriesRemoved, InstallationSuspend, PullRequestAssigned, PullRequestClosed, PullRequestConvertedToDraft, PullRequestEdited, PullRequestLabeled, PullRequestOpened, PullRequestReadyForReview, PullRequestReopened, PullRequestSynchronize, PullRequestUnassigned, PullRequestUnlabeled } from './types/queue-payloads.js';
+import { pullRequestQueue } from './queues/pull-request.queue.js';
+import { AllowedAuthorAssociations } from './utils/common/index.js';
+import { commentQueue } from './queues/comment.queue.js';
+import { addCommentReaction, SupportedCommentCommands } from './utils/common/comment.js';
+import { serverAdapter } from './bull-board.js';
 
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
 const PORT = process.env.PORT;
@@ -24,6 +23,9 @@ if (!githubWebhookSecret) {
 
 const server = express();
 const webhooks = new Webhooks({ secret: githubWebhookSecret });
+
+// bull-board endpoint
+server.use('/admin/queues', serverAdapter.getRouter());
 
 server.post("/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
     const signature = req.headers['x-hub-signature-256'] as string
@@ -68,63 +70,26 @@ webhooks.on("installation.created", async ({ payload }) => {
             userType: payload.sender.type,
         };
 
-        const githubInstallation = await GithubInstallation.findOneAndUpdate(
-            { installationId: payload.installation.id.toString() },
-            {
-                $setOnInsert: {
-                    installationId: payload.installation.id.toString(),
-                    ownedBy: owner,
-                    githubRedirect: payload.installation.html_url,
-                    target: {
-                        id: payload.installation.target_id.toString(),
-                        accountType: payload.installation.target_type,
-                    },
-                    installedBy: installedBy,
-                    installedOn: payload.installation.created_at,
-                    lastUpdatedAt: payload.installation.updated_at,
-                    repositorySelection: payload.installation.repository_selection,
-                }
-            },
-            { upsert: true, returnDocument: "after", projection: { _id: 1 } },
-        );
+        await installationQueue.add(QUEUE_EVENTS.INSTALLATION.CREATED, {
+            installationId: payload.installation.id.toString(),
+            owner: owner,
+            installedBy: installedBy,
+            installationHtmlUrl: payload.installation.html_url,
+            installationTargetId: payload.installation.target_id.toString(),
+            installationAccountType: payload.installation.target_type,
+            installationInstalledOn: payload.installation.created_at,
+            installationUpdatedAt: payload.installation.updated_at,
+            installationRepositorySelection: payload.installation.repository_selection,
+            repositories: payload.repositories?.map(repo => ({
+                id: repo.id.toString(),
+                name: repo.name,
+                full_name: repo.full_name,
+            })) ?? [],
+        } satisfies InstallationCreated, {
+            jobId: `${QUEUE_EVENTS.INSTALLATION.CREATED}_${payload.installation.id}`,
+        });
 
-        const repos = payload.repositories ?? [];
-        if (repos.length > 0) {
-            const result = await Repo.bulkWrite(
-                repos.map(repo => ({
-                    updateOne: {
-                        filter: {
-                            installationId: githubInstallation._id,
-                            githubId: repo.id.toString(),
-                        },
-                        update: {
-                            $set: {
-                                deletedAt: null,
-                            },
-                            $setOnInsert: {
-                                installationId: githubInstallation._id,
-                                installedOn: new Date(payload.installation.created_at),
-                                githubId: repo.id.toString(),
-                                githubName: repo.name,
-                                githubFullName: repo.full_name,
-                            }
-                        },
-                        upsert: true,
-                    }
-                }))
-            );
-
-            if (result.upsertedCount > 0) {
-                const reposToCreateConfig = Object.values(result.upsertedIds) as Types.ObjectId[];
-                await RepoConfig.insertMany(
-                    reposToCreateConfig.map(repoId => ({
-                        repoId: repoId,
-                    }))
-                )
-            }
-
-            console.log(`Inserted ${repos.length} repos for installation ${payload.installation.id}`);
-        }
+        console.log(`Added installation.created job to queue for installation ${payload.installation.id}`);
     } catch (error) {
         console.log("Error [installation.created]:", error);
     }
@@ -135,26 +100,13 @@ webhooks.on("installation.deleted", async ({ payload }) => {
     console.dir(payload, { depth: null, colors: true });
 
     try {
-        const githubInstallation = await GithubInstallation.findOneAndUpdate(
-            {
-                installationId: payload.installation.id.toString(),
-                deletedAt: { $eq: null },
-            },
-            { $set: { deletedAt: new Date() } },
-            { projection: { _id: 1 } },
-        );
+        await installationQueue.add(QUEUE_EVENTS.INSTALLATION.DELETED, {
+            installationId: payload.installation.id.toString(),
+        } satisfies InstallationDeleted, {
+            jobId: `${QUEUE_EVENTS.INSTALLATION.DELETED}_${payload.installation.id}`,
+        });
 
-        if (!githubInstallation) {
-            console.log(`No GithubInstallation found or already deleted found for installation ${payload.installation.id}`);
-            return;
-        }
-
-        await Repo.updateMany(
-            { installationId: githubInstallation?._id },
-            { $set: { deletedAt: new Date() } }
-        );
-
-        console.log(`Marked repos as deleted for installation ${payload.installation.id}`);
+        console.log(`Added installation.deleted job to queue for installation ${payload.installation.id}`);
     } catch (error) {
         console.log("Error [installation.deleted]:", error);
     }
@@ -165,21 +117,13 @@ webhooks.on("installation.suspend", async ({ payload }) => {
     console.dir(payload, { depth: null, colors: true });
 
     try {
-        const installationId = payload.installation.id.toString();
-        const githubInstallation = await GithubInstallation.findOneAndUpdate(
-            {
-                installationId: installationId,
-                deletedAt: { $eq: null },
-                suspendedAt: { $eq: null },
-            },
-            { $set: { suspendedAt: new Date() } },
-            { projection: { _id: 1 } },
-        );
-        if (githubInstallation) {
-            console.log(`Marked installation ${installationId} as suspended`);
-        } else {
-            console.log(`No GithubInstallation found or deleted one or already suspended one for installation ${installationId}`);
-        }
+        await installationQueue.add(QUEUE_EVENTS.INSTALLATION.SUSPEND, {
+            installationId: payload.installation.id.toString(),
+        } satisfies InstallationSuspend, {
+            jobId: `${QUEUE_EVENTS.INSTALLATION.SUSPEND}_${payload.installation.id}`
+        });
+
+        console.log(`Added installation.suspend job to queue for installation ${payload.installation.id}`);
     } catch (error) {
         console.log("Error [installation.suspend]:", error)
     }
@@ -190,21 +134,13 @@ webhooks.on("installation.unsuspend", async ({ payload }) => {
     console.dir(payload, { depth: null, colors: true });
 
     try {
-        const installationId = payload.installation.id.toString();
-        const githubInstallation = await GithubInstallation.findOneAndUpdate(
-            {
-                installationId,
-                deletedAt: { $eq: null },
-                suspendedAt: { $ne: null },
-            },
-            { $set: { suspendedAt: null } },
-            { projection: { _id: 1 } },
-        );
-        if (githubInstallation) {
-            console.log(`Marked installation ${installationId} as unsuspended`);
-        } else {
-            console.log(`No GithubInstallation found for installation ${installationId}`);
-        }
+        await installationQueue.add(QUEUE_EVENTS.INSTALLATION.UNSUSPEND, {
+            installationId: payload.installation.id.toString(),
+        } satisfies InstallationSuspend, {
+            jobId: `${QUEUE_EVENTS.INSTALLATION.UNSUSPEND}_${payload.installation.id}`
+        });
+
+        console.log(`Added installation.unsuspend job to queue for installation ${payload.installation.id}`);
     } catch (error) {
         console.log("Error [installation.unsuspend]:", error)
     }
@@ -215,115 +151,19 @@ webhooks.on("installation_repositories.added", async ({ payload }) => {
     console.dir(payload, { depth: null, colors: true });
 
     try {
-        const installationDoc = await GithubInstallation.findOne(
-            { installationId: payload.installation.id.toString() },
-            {
-                _id: 1,
-                repositorySelection: 1,
-            },
-        );
+        await installationQueue.add(QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED, {
+            installationId: payload.installation.id.toString(),
+            installationRepositorySelection: payload.installation.repository_selection,
+            repositoriesAdded: payload.repositories_added.map(repo => ({
+                id: repo.id.toString(),
+                name: repo.name,
+                full_name: repo.full_name,
+            })),
+        } satisfies InstallationRepositoriesAdded, {
+            jobId: `${QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED}_${payload.installation.id}_${payload.repositories_added.map(repo => repo.id).join('_')}`,
+        });
 
-        if (!installationDoc) {
-            console.log(`No GithubInstallation found for installation ${payload.installation.id}`);
-            return;
-        }
-        // check if change of installation selection is there or not
-        if (installationDoc.repositorySelection === 'all' && payload.installation.repository_selection === 'selected') {
-            // if above condition satisfies, meaning there is possible chance that not all repos which were initially there are now selected.
-            // so our task is basically just to soft delete not to add anything because initially all the repos were added
-            const allRepos = await Repo.find(
-                { installationId: installationDoc._id },
-                { githubId: 1 },
-            );
-            const allReposGithubIds = allRepos.map(repo => repo.githubId);
-            const addedReposGithubIds = payload.repositories_added.map(repo => repo.id.toString());
-            const reposToDelete = allReposGithubIds.filter(repoId => !addedReposGithubIds.includes(repoId));
-
-            // no need of await as we are just soft deleting
-            Repo.updateMany(
-                {
-                    installationId: installationDoc._id,
-                    githubId: { $in: reposToDelete },
-                },
-                {
-                    $set: {
-                        deletedAt: new Date(),
-                    }
-                }
-            ).catch(err => console.log("Error while soft deleting repos after installation selection changed to 'selected':", err));
-            console.log(`Installation changed to 'selected'. Marked ${reposToDelete.toString()} repos as deleted for installation ${installationDoc._id.toString()}`);
-        } else {
-            const reposToAdd = payload.repositories_added;
-
-            // to find if any soft deleted repo is there
-            const existingRepos = await Repo.find(
-                {
-                    installationId: installationDoc._id,
-                    githubId: { $in: reposToAdd.map(repo => repo.id.toString()) },
-                },
-                { githubId: 1, deletedAt: 1 }
-            );
-            const reposToIgnore = new Set<string>();
-            const softDeletedReposIds = existingRepos
-                .filter(repo => {
-                    if (!repo.deletedAt) {
-                        reposToIgnore.add(repo.githubId.toString());
-                    }
-                    return Boolean(repo.deletedAt);
-                })
-                .map(repo => repo.githubId);
-            const reposToRestore = reposToAdd
-                .filter(repo => softDeletedReposIds.includes(repo.id.toString()))
-                .map(repo => repo.id.toString());
-
-            const reposToCreate = reposToAdd
-                .filter(repo => !softDeletedReposIds.includes(repo.id.toString()) && !reposToIgnore.has(repo.id.toString()))
-                .map(repository => ({
-                    installationId: installationDoc._id,
-                    installedOn: new Date(),
-                    githubId: repository.id.toString(),
-                    githubName: repository.name,
-                    githubFullName: repository.full_name,
-                }));
-
-            const [insertedRepos, restoredRepos] = await Promise.allSettled([
-                reposToCreate.length > 0 ? Repo.insertMany(reposToCreate) : Promise.resolve([]),
-                reposToRestore.length > 0 ? Repo.updateMany(
-                    {
-                        installationId: installationDoc._id,
-                        githubId: { $in: reposToRestore }
-                    },
-                    { $set: { deletedAt: null } },
-                ) : Promise.resolve([]),
-            ]);
-
-            if (insertedRepos.status === 'rejected') {
-                console.log("Error while inserting new repos:", insertedRepos.reason);
-            } else {
-                await RepoConfig.insertMany(insertedRepos.value.map(repo => ({
-                    repoId: repo._id,
-                })));
-                console.log(`Inserted ${reposToCreate.length} repos for installation ${payload.installation?.id}`);
-            }
-
-            if (restoredRepos.status === 'rejected') {
-                console.log("Error while restoring soft deleted repos:", restoredRepos.reason);
-            } else {
-                console.log(`Restored ${reposToRestore.length} repos for installation ${payload.installation?.id}`)
-            }
-
-            console.log(`Ignored ${reposToIgnore.size} repos for installation ${payload.installation?.id} as they were already present and not soft deleted.`);
-        }
-
-        // update the repositorySelection field in GithubInstallation if it has changed
-        if (installationDoc.repositorySelection !== payload.installation.repository_selection) {
-            // no await needed
-            GithubInstallation.updateOne(
-                { _id: installationDoc._id },
-                { $set: { repositorySelection: payload.installation.repository_selection } },
-            ).catch(err => console.log("Error while updating installation selection:", err));
-        }
-
+        console.log(`Added installation_repositories.added job to queue for installation ${payload.installation.id}`);
     } catch (error) {
         console.log("Error [installation_repositories.added]:", error);
     }
@@ -334,26 +174,16 @@ webhooks.on("installation_repositories.removed", async ({ payload }) => {
     console.dir(payload, { depth: null, colors: true });
 
     try {
-        const installationId = await GithubInstallation.findOne(
-            { installationId: payload.installation.id.toString() },
-            { _id: 1 },
-        )
-        if (!installationId) {
-            console.log(`No GithubInstallation found for installation ${payload.installation.id}`);
-            return;
-        }
-        const reposToDelete = payload.repositories_removed.map(repository => ({
-            installationId: installationId._id,
-            githubId: repository.id.toString(),
-        }));
-        await Repo.updateMany(
-            {
-                installationId: installationId._id,
-                githubId: { $in: reposToDelete.map(repo => repo.githubId) }
-            },
-            { $set: { deletedAt: new Date() } },
-        );
-        console.log(`Marked ${reposToDelete.length} repos as deleted for installation ${payload.installation?.id}`);
+        await installationQueue.add(QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED, {
+            installationId: payload.installation.id.toString(),
+            repositoriesRemoved: payload.repositories_removed.map(repo => ({
+                id: repo.id.toString(),
+            })),
+        } satisfies InstallationRepositoriesRemoved, {
+            jobId: `${QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED}_${payload.installation.id}_${payload.repositories_removed.map(repo => repo.id).join('_')}`,
+        });
+
+        console.log(`Added installation_repositories.removed job to queue for installation ${payload.installation.id}`);
     } catch (error) {
         console.log("Error [installation_repositories.removed]:", error);
     }
@@ -363,63 +193,30 @@ webhooks.on("installation_repositories.removed", async ({ payload }) => {
 /**
  * PR Related Webhooks
  */
-
-// pull_request.opened                - PR created
-// pull_request.closed                - PR closed(could be merged or just closed)
-// pull_request.reopened              - closed PR reopened
-// pull_request.synchronize           - new commit pushed to PR branch
-// pull_request.edited                - title, body, or base branch changed
-// pull_request.converted_to_draft    - PR converted to draft
-// pull_request.ready_for_review      - draft PR marked ready
-// pull_request.labeled               - label added to PR
-// pull_request.unlabeled             - label removed from PR
-// pull_request.assigned              - assignee added
-// pull_request.unassigned            - assignee removed
-
 webhooks.on("pull_request.opened", async ({ payload }) => {
     console.log("PR Opened");
     console.dir(payload, { depth: null, colors: true });
     try {
-        if (!payload.installation) return;
-
-        const installationRecord = await GithubInstallation.findOne(
-            {
-                installationId: payload.installation.id.toString(),
-                suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
-            },
-            { _id: 1 },
-        )
-        if (!installationRecord) {
-            console.log(`No installation record found for installation ${payload.installation.id}`);
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.opened");
             return;
         }
 
-        const repoRecord = await Repo.findOne(
-            {
-                installationId: installationRecord._id,
-                githubId: payload.repository.id.toString(),
-                deletedAt: { $eq: null },
-            },
-            { _id: 1 },
-        );
-        if (!repoRecord) {
-            console.log(`No repo found for installation ${payload.installation.id} and PR ${payload.pull_request.id}`);
-            return;
-        }
-
-        const prRecord = await PullRequest.create({
-            repoId: repoRecord._id,
-            installationId: installationRecord._id,
-            githubPrId: payload.pull_request.id.toString(),
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.OPENED, {
+            installationId: payload.installation.id.toString(),
+            repositoryId: payload.repository.id.toString(),
+            repoOwnerLogin: payload.repository.owner.login,
+            repoName: payload.repository.name,
+            prId: payload.pull_request.id.toString(),
             prNumber: payload.pull_request.number,
-            title: payload.pull_request.title,
-            htmlUrl: payload.pull_request.html_url,
-            state: payload.pull_request.state,
+            prTitle: payload.pull_request.title,
+            prHtmlUrl: payload.pull_request.html_url,
+            prState: payload.pull_request.state,
             isDraft: payload.pull_request.draft,
-            baseBranch: payload.pull_request.base.ref,
+            baseBranchRef: payload.pull_request.base.ref,
             baseBranchHeadSha: payload.pull_request.base.sha,
-            headBranch: payload.pull_request.head.ref,
+            headBranchRef: payload.pull_request.head.ref,
+            headBranchHeadSha: payload.pull_request.head.sha,
             author: {
                 id: payload.pull_request.user.id.toString(),
                 login: payload.pull_request.user.login,
@@ -427,44 +224,18 @@ webhooks.on("pull_request.opened", async ({ payload }) => {
                 githubUrl: payload.pull_request.user.html_url,
                 userType: payload.pull_request.user.type,
             },
-            labels: payload.pull_request.labels.map(label => ({
-                id: label.id,
+            prLabels: payload.pull_request.labels.map(label => ({
+                id: label.id.toString(),
                 name: label.name,
                 default: label.default,
             })),
-            githubCreatedAt: payload.pull_request.created_at,
-            githubUpdatedAt: payload.pull_request.updated_at,
-            lastCommitAt: new Date(payload.pull_request.updated_at), // initially store the creation/updation time of PR as as there can be case when branch was there since few months and pr is created recently
-            isTracked: true,
+            prCreatedOn: payload.pull_request.created_at,
+            prUpdatedAt: payload.pull_request.updated_at,
+        } satisfies PullRequestOpened, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${payload.installation.id}_${payload.pull_request.id}`,
         });
 
-        const octokit = await githubApp.getInstallationOctokit(payload.installation.id);
-        const prFiles = await octokit.rest.pulls.listFiles({
-            owner: payload.repository.owner.login,
-            repo: payload.repository.name,
-            pull_number: payload.pull_request.number,
-        });
-
-        if (prFiles.status === 200) {
-            const convertedPatchObject = processPullRequestFiles(prFiles.data);
-
-            PullRequestFile.insertMany(
-                convertedPatchObject.map(patchObj => ({
-                    pullRequestId: prRecord._id,
-                    file: patchObj.file,
-                    status: patchObj.status,
-                    hunks: patchObj.hunks.map(hunk => ({
-                        oldFileStartLine: hunk.oldFileStartLine,
-                        oldFilePatchLinesCount: hunk.oldFilePatchLinesCount,
-                        newFileStartLine: hunk.newFileStartLine,
-                        newFilePatchLinesCount: hunk.newFilePatchLinesCount,
-                        lines: hunk.lines,
-                    }))
-                }))
-            );
-        }
-
-        console.log('PR files -->', prFiles);
+        console.log(`Added pull_request.opened job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.opened]:", error);
     }
@@ -474,7 +245,22 @@ webhooks.on("pull_request.closed", async ({ payload }) => {
     console.log("PR Closed");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.closed");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.CLOSED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+            prState: payload.pull_request.merged_at === null ? 'closed' : 'merged',
+            mergedAt: payload.pull_request.merged_at,
+        } satisfies PullRequestClosed, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.CLOSED}_${payload.installation.id}_${payload.pull_request.id}`,
+        });
+
+        console.log(`Added pull_request.closed job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.closed]:", error);
     }
@@ -484,7 +270,21 @@ webhooks.on("pull_request.reopened", async ({ payload }) => {
     console.log("PR Reopened");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.reopened");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.REOPENED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            prState: payload.pull_request.state,
+            updatedAt: payload.pull_request.updated_at,
+        } satisfies PullRequestReopened, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.REOPENED}_${payload.installation.id}_${payload.pull_request.id}`,
+        });
+
+        console.log(`Added pull_request.reopened job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.reopened]:", error);
     }
@@ -494,7 +294,25 @@ webhooks.on("pull_request.synchronize", async ({ payload }) => {
     console.log("PR Synchronize");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.synchronize");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            repoOwnerLogin: payload.repository.owner.login,
+            repoName: payload.repository.name,
+            prNumber: payload.pull_request.number,
+            updatedAt: payload.pull_request.updated_at,
+            beforeCommitSha: payload.before,
+            afterCommitSha: payload.after,
+        } satisfies PullRequestSynchronize, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE}_${payload.installation.id}_${payload.pull_request.id}_${payload.before}_${payload.after}`,
+        });
+
+        console.log(`Added pull_request.synchronize job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.synchronize]:", error);
     }
@@ -504,16 +322,33 @@ webhooks.on("pull_request.edited", async ({ payload }) => {
     console.log("PR Edited");
     console.dir(payload, { depth: null, colors: true });
     try {
-        if (payload.changes.title) { // title is changed
-            // update title as payload.pull_request.title
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.edited");
+            return;
         }
-        if (payload.changes.body) { // body is changed
-            // update body as payload.pull_request.body
+
+        const queuePayload: Record<string, any> = {};
+
+        if (payload.changes.title) {
+            queuePayload.updatedTitle = payload.pull_request.title;
         }
         if (payload.changes.base) { // base branch changed
-            // payload.changes.base.ref
-            // payload.changes.base.sha
+            queuePayload.updatedBase = payload.pull_request.base.ref;
+            queuePayload.updatedBaseSha = payload.pull_request.base.sha;
         }
+
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.EDITED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+            repoName: payload.repository.name,
+            repoOwnerLogin: payload.repository.owner.login,
+            ...queuePayload,
+        } satisfies PullRequestEdited, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.EDITED}_${payload.installation.id}_${payload.pull_request.id}_${payload.pull_request.updated_at}`,
+        });
+
+        console.log(`Added pull_request.edited job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.edited]:", error);
     }
@@ -523,7 +358,20 @@ webhooks.on("pull_request.converted_to_draft", async ({ payload }) => {
     console.log("PR Converted to Draft");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.converted_to_draft");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.CONVERTED_TO_DRAFT, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+        } satisfies PullRequestConvertedToDraft, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.CONVERTED_TO_DRAFT}_${payload.installation.id}_${payload.pull_request.id}`,
+        });
+
+        console.log(`Added pull_request.converted_to_draft job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.converted_to_draft]:", error);
     }
@@ -533,7 +381,20 @@ webhooks.on("pull_request.ready_for_review", async ({ payload }) => {
     console.log("PR Ready for Review");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.ready_for_review");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+        } satisfies PullRequestReadyForReview, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW}_${payload.installation.id}_${payload.pull_request.id}`,
+        });
+
+        console.log(`Added pull_request.ready_for_review job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.ready_for_review]:", error);
     }
@@ -543,7 +404,29 @@ webhooks.on("pull_request.labeled", async ({ payload }) => {
     console.log("PR Labeled");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.labeled");
+            return;
+        }
+        if (!payload.label) {
+            console.log("No label found in payload for pull_request.labeled");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.LABELED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+            label: {
+                id: payload.label.id.toString(),
+                name: payload.label.name,
+                default: payload.label.default,
+            },
+        } satisfies PullRequestLabeled, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.LABELED}_${payload.installation.id}_${payload.pull_request.id}_${payload.pull_request.updated_at}`,
+        });
+
+        console.log(`Added pull_request.labeled job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.labeled]:", error);
     }
@@ -553,7 +436,29 @@ webhooks.on("pull_request.unlabeled", async ({ payload }) => {
     console.log("PR Unlabeled");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.unlabeled");
+            return;
+        }
+        if (!payload.label) {
+            console.log("No label found in payload for pull_request.unlabeled");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.UNLABELED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+            label: {
+                id: payload.label.id.toString(),
+                name: payload.label.name,
+                default: payload.label.default,
+            },
+        } satisfies PullRequestUnlabeled, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.UNLABELED}_${payload.installation.id}_${payload.pull_request.id}_${payload.pull_request.updated_at}`,
+        });
+
+        console.log(`Added pull_request.unlabeled job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.unlabeled]:", error);
     }
@@ -563,7 +468,31 @@ webhooks.on("pull_request.assigned", async ({ payload }) => {
     console.log("PR Assigned");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.assigned");
+            return;
+        }
+        if (!payload.assignee) {
+            console.log("No assignee found in payload for pull_request.assigned");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.ASSIGNED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+            assignee: {
+                id: payload.assignee.id.toString(),
+                login: payload.assignee.login,
+                avatarUrl: payload.assignee.avatar_url ?? '',
+                githubUrl: payload.assignee.html_url ?? '',
+                userType: payload.assignee.type ?? '',
+            },
+        } satisfies PullRequestAssigned, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.ASSIGNED}_${payload.installation.id}_${payload.pull_request.id}_${payload.pull_request.updated_at}`,
+        });
+
+        console.log(`Added pull_request.assigned job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.assigned]:", error);
     }
@@ -573,7 +502,31 @@ webhooks.on("pull_request.unassigned", async ({ payload }) => {
     console.log("PR Unassigned");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (!payload.installation) {
+            console.log("No installation found in payload for pull_request.assigned");
+            return;
+        }
+        if (!payload.assignee) {
+            console.log("No assignee found in payload for pull_request.assigned");
+            return;
+        }
 
+        await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.UNASSIGNED, {
+            installationId: payload.installation.id.toString(),
+            prId: payload.pull_request.id.toString(),
+            updatedAt: payload.pull_request.updated_at,
+            assignee: {
+                id: payload.assignee.id.toString(),
+                login: payload.assignee.login,
+                avatarUrl: payload.assignee.avatar_url ?? '',
+                githubUrl: payload.assignee.html_url ?? '',
+                userType: payload.assignee.type ?? '',
+            },
+        } satisfies PullRequestUnassigned, {
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.UNASSIGNED}_${payload.installation.id}_${payload.pull_request.id}_${payload.pull_request.updated_at}`,
+        });
+
+        console.log(`Added pull_request.unassigned job to queue for PR ${payload.pull_request.id}`);
     } catch (error) {
         console.log("Error [pull_request.unassigned]:", error);
     }
@@ -588,30 +541,147 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
     console.log("Issue Comment Created");
     console.dir(payload, { depth: null, colors: true });
     try {
+        if (payload.comment.user?.id === Number(process.env.REPOPROBE_BOT_GITHUB_ID)) { // ignore self comment
+            return;
+        }
+        if (!payload.issue.pull_request) {
+            console.log("Ignoring comment on non-PR issue");
+            return;
+        }
+        if (!payload.installation) {
+            console.log("No installation found in payload for issue_comment.created");
+            return;
+        }
+        if (!AllowedAuthorAssociations.includes(payload.comment.author_association)) {
+            console.log(`Ignoring comment from author association: ${payload.comment.author_association}`);
+            return;
+        }
 
+        // react the comment with eyes emoji
+        addCommentReaction(
+            payload.installation.id,
+            payload.repository.name,
+            payload.repository.owner.login,
+            payload.comment.id,
+            'eyes',
+        ).catch(err => {
+            console.log(`Error adding eyes reaction to comment ${payload.comment.id}:`, err);
+        });
+
+        const commandRegex = new RegExp(
+            `^@repoprobe\\s+(${SupportedCommentCommands.join('|')})\\b`,
+            'i'
+        );
+        const match = commandRegex.exec(payload.comment.body);
+        if (match) {
+            const command = match[1];
+
+            switch (command) {
+                case 'check':
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.CHECK, {
+                        prNumber: payload.issue.number,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        repoName: payload.repository.name,
+                        repoId: payload.repository.id.toString(),
+                        installationId: payload.installation.id.toString(),
+                        githubCommentId: payload.comment.id,
+                    } satisfies CommentCheck, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.CHECK}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    })
+
+                    console.log(`Added ${QUEUE_EVENTS.COMMENT.CHECK} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+                    break;
+                case 'status':
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.STATUS, {
+                        prNumber: payload.issue.number,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        repoName: payload.repository.name,
+                        repoId: payload.repository.id.toString(),
+                        installationId: payload.installation.id.toString(),
+                    } satisfies CommentStatus, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.STATUS}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    });
+                    break;
+                case 'track':
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.TRACK, {
+                        prNumber: payload.issue.number,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        repoName: payload.repository.name,
+                        repoId: payload.repository.id.toString(),
+                        installationId: payload.installation.id.toString(),
+                        githubCommentId: payload.comment.id,
+                    } satisfies CommentTrack, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.TRACK}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    });
+
+                    console.log(`Added ${QUEUE_EVENTS.COMMENT.TRACK} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+                    break;
+                case 'untrack':
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.UNTRACK, {
+                        prNumber: payload.issue.number,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        repoName: payload.repository.name,
+                        repoId: payload.repository.id.toString(),
+                        installationId: payload.installation.id.toString(),
+                        githubCommentId: payload.comment.id,
+                    } satisfies CommentUntrack, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.UNTRACK}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    });
+
+                    console.log(`Added ${QUEUE_EVENTS.COMMENT.UNTRACK} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+                    break;
+                case 'help': {
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.HELP, {
+                        prNumber: payload.issue.number,
+                        repoName: payload.repository.name,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        installationId: payload.installation.id.toString(),
+                    } satisfies CommentHelp, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.HELP}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    });
+                    console.log(`Added ${QUEUE_EVENTS.COMMENT.HELP} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+                    break;
+                }
+                default: {
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.INVALID_COMMAND, {
+                        prNumber: payload.issue.number,
+                        repoName: payload.repository.name,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        installationId: payload.installation.id.toString(),
+                    } satisfies CommentInvalidCommand, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.INVALID_COMMAND}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    });
+
+                    console.log(`Added ${QUEUE_EVENTS.COMMENT.INVALID_COMMAND} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+                    break;
+                }
+            }
+        } else if (/@repoprobe\b/i.test(payload.comment.body)) {
+            await commentQueue.add(QUEUE_EVENTS.COMMENT.INVALID_COMMAND, {
+                prNumber: payload.issue.number,
+                repoName: payload.repository.name,
+                repoOwnerLogin: payload.repository.owner.login,
+                installationId: payload.installation.id.toString(),
+            } satisfies CommentInvalidCommand, {
+                jobId: `${QUEUE_EVENTS.COMMENT.INVALID_COMMAND}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+            });
+
+            console.log(`Added ${QUEUE_EVENTS.COMMENT.INVALID_COMMAND} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+        }
     } catch (error) {
         console.log("Error [issue_comment.created]:", error);
     }
 });
 
-// webhooks.on("issue_comment.created", async ({ payload }) => {
-//     if (!payload.comment.body.includes("@RepoPRobe")) return;
-//     if (!payload.installation) return;
+process.on('uncaughtException', function (err) {
+    console.error(err, 'Uncaught exception');
+    process.exit(1);
+});
 
-//     const octokit = await githubApp.getInstallationOctokit(payload.installation.id)
-//     console.log(JSON.stringify(payload));
-
-//     await octokit.rest.issues.createComment({
-//         owner: payload.repository.owner.login,
-//         repo: payload.repository.name,
-//         issue_number: payload.issue.number,
-//         body: '👋 RepoProbe here — I am alive!'
-//     })
-// })
-
-
-// TODO: also keep the thing like @repoprobe report
-// which will work like users to report that our system did something wrong maybe wrong conflicts or no conflicts even though conflicts were there
+process.on('unhandledRejection', (reason, promise) => {
+    console.error({ promise, reason }, 'Unhandled Rejection at: Promise');
+    process.exit(1);
+});
 
 async function main() {
     await connectDB();
