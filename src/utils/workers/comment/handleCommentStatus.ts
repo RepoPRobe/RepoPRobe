@@ -4,6 +4,7 @@ import { PullRequest } from "../../../db/schema/PullRequest";
 import { commentQueue } from "../../../queues/comment.queue";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { BotCommentCustom, CommentStatus } from "../../../types/queue-payloads";
+import { postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment";
 
 export async function handleCommentStatus(payload: CommentStatus) {
     const formatDate = (date: Date | null) => {
@@ -36,36 +37,15 @@ export async function handleCommentStatus(payload: CommentStatus) {
             installationId: installationRecord._id,
             prNumber: payload.prNumber,
         });
-        if (!prRecord) {
-            console.log(`No PR record found for PR ${payload.prNumber} in installation ${installationRecord._id}`);
-            await commentQueue.add(QUEUE_EVENTS.BOT_COMMENT.CUSTOM, {
-                prNumber: payload.prNumber,
-                installationId: Number(payload.installationId),
-                repoName: payload.repoName,
-                repoOwnerLogin: payload.repoOwnerLogin,
-                commentBody: [
-                    '**This PR is not tracked with RepoProbe.**',
-                    '> To track this PR, please use `@repoprobe track` on this PR.',
-                ].join('\n'),
-            } satisfies BotCommentCustom, {
-                jobId: `${QUEUE_EVENTS.BOT_COMMENT.CUSTOM}_${payload.installationId}_${payload.repoId}_${payload.prNumber}_PR_NOT_TRACKED`,
-            });
-            return;
-        }
-
-        if (!prRecord.isTracked) {
-            await commentQueue.add(QUEUE_EVENTS.BOT_COMMENT.CUSTOM, {
-                prNumber: payload.prNumber,
-                installationId: Number(payload.installationId),
-                repoName: payload.repoName,
-                repoOwnerLogin: payload.repoOwnerLogin,
-                commentBody: [
-                    '**This PR is not tracked with RepoProbe.**',
-                    '> To track this PR, please use `@repoprobe track` on this PR.',
-                ].join('\n'),
-            } satisfies BotCommentCustom, {
-                jobId: `${QUEUE_EVENTS.BOT_COMMENT.CUSTOM}_${payload.installationId}_${payload.repoId}_${payload.prNumber}_PR_NOT_TRACKED`,
-            });
+        if (!prRecord || !prRecord.isTracked) {
+            if (!prRecord) console.log(`No PR record found for PR ${payload.prNumber} in installation ${installationRecord._id}`);
+            await postComment(
+                Number(payload.installationId),
+                payload.repoName,
+                payload.repoOwnerLogin,
+                payload.prNumber,
+                PR_NOT_TRACKED_COMMENT_MARKDOWN,
+            );
             return;
         }
 

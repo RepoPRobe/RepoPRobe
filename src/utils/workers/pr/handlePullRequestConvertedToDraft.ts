@@ -5,11 +5,6 @@ import { PullRequestConvertedToDraft } from "../../../types/queue-payloads";
 
 export async function handlePullRequestConvertedToDraft(payload: PullRequestConvertedToDraft) {
     try {
-        // TODO: for most of the pr request we have to fetch the installation id, 
-        // implement a common cache with githubInstallationId -> our db record _id
-        // if in cache the take from there else fetched from db and store in cache
-        // for that make a common helper like fetch installation or something like that.
-
         const installationRecord = await GithubInstallation.findOne(
             {
                 installationId: payload.installationId,

@@ -41,3 +41,13 @@ export async function addCommentReaction(
         content: content,
     });
 }
+
+export const PR_NOT_TRACKED_COMMENT_MARKDOWN = [
+    '**This PR is not tracked with RepoProbe.**',
+    '> To track this PR, please use `@RepoPRobe track` on this PR.',
+    '### Next steps',
+    '1. Run `@RepoPRobe track` to track this PR.',
+    '2. Run `@RepoPRobe status` to monitor the PR file processing.',
+    '3. Wait until **PR Files Processing** shows `✅ Completed`.',
+    '4. Then run `@RepoPRobe check` to detect conflicts.',
+].join('\n');

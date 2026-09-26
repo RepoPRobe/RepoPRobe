@@ -1,9 +1,11 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { PullRequest } from "../../../db/schema/PullRequest";
 import { Repo } from "../../../db/schema/Repo";
+import { githubApp } from "../../../github/client";
+import { pullRequestQueue } from "../../../queues/pull-request.queue";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { CommentTrack } from "../../../types/queue-payloads";
-import { addCommentReaction } from "../../common/comment";
+import { CommentTrack, PullRequestOpened } from "../../../types/queue-payloads";
+import { addCommentReaction, postComment } from "../../common/comment";
 
 export async function handleCommentTrack(payload: CommentTrack) {
     try {
@@ -33,28 +35,79 @@ export async function handleCommentTrack(payload: CommentTrack) {
             return;
         }
 
-        const prRecord = await PullRequest.findOneAndUpdate(
-            {
-                installationId: installationRecord._id,
-                repoId: repoRecord._id,
-                prNumber: payload.prNumber,
-                isTracked: false,
-                githubClosedAt: null,
-                githubMergedAt: null,
-            },
-            {
-                $set: {
-                    isTracked: true,
-                },
-            },
-            {
-                projection: {
-                    _id: 1,
-                },
-            }
-        );
+        const prRecord = await PullRequest.findOne({
+            installationId: installationRecord._id,
+            repoId: repoRecord._id,
+            prNumber: payload.prNumber,
+        });
 
-        if(prRecord) {
+        if (!prRecord || prRecord.deletedAt) {
+            const octokit = await githubApp.getInstallationOctokit(Number(payload.installationId));
+            const { data: pr } = await octokit.rest.pulls.get({
+                owner: payload.repoOwnerLogin,
+                repo: payload.repoName,
+                pull_number: payload.prNumber,
+            });
+
+            if (pr.merged_at || pr.state !== 'open') {
+                const message = pr.merged_at
+                    ? 'Cannot Track Merged Pull Request'
+                    : 'Cannot Track Closed Pull Request';
+                await postComment(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.prNumber,
+                    message,
+                );
+                await addCommentReaction(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.githubCommentId,
+                    'confused',
+                );
+                console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} cannot be tracked:`, message);
+                return;
+            }
+            if (prRecord?.deletedAt) {
+                // if deleted PR record exists, we can delete it and re-add to the queue for processing
+                // this will ensure that we have a fresh PR record data with tracking enabled
+                await PullRequest.deleteOne({ _id: prRecord._id });
+            }
+
+            await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.OPENED, {
+                installationId: payload.installationId,
+                repositoryId: payload.repoId,
+                repoOwnerLogin: payload.repoOwnerLogin,
+                repoName: payload.repoName,
+                prId: pr.id.toString(),
+                prNumber: payload.prNumber,
+                prTitle: pr.title,
+                prHtmlUrl: pr.html_url,
+                prState: pr.state,
+                isDraft: pr.draft,
+                baseBranchRef: pr.base.ref,
+                baseBranchHeadSha: pr.base.sha,
+                headBranchRef: pr.head.ref,
+                headBranchHeadSha: pr.head.sha,
+                author: {
+                    id: pr.user.id.toString(),
+                    login: pr.user.login,
+                    avatarUrl: pr.user.avatar_url,
+                    githubUrl: pr.user.html_url,
+                    userType: pr.user.type,
+                },
+                prLabels: pr.labels.map(label => ({
+                    id: label.id.toString(),
+                    name: label.name,
+                    default: label.default,
+                })),
+                prCreatedOn: pr.created_at,
+                prUpdatedAt: pr.updated_at,
+            } satisfies PullRequestOpened, {
+                jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${payload.installationId}_${pr.id}`,
+            });
             await addCommentReaction(
                 Number(payload.installationId),
                 payload.repoName,
@@ -62,18 +115,62 @@ export async function handleCommentTrack(payload: CommentTrack) {
                 payload.githubCommentId,
                 '+1',
             );
-            console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now tracked`);
-        } else {
+            console.log(`PR Not found, added to ${QUEUE_EVENTS.PULL_REQUEST.OPENED} queue for processing:`, payload.installationId, pr.id);
+            return;
+        }
+
+        let message = null;
+        let reaction: '+1' | 'confused' = '+1';
+        if (prRecord.state === 'merged' || prRecord.githubMergedAt) {
+            message = 'Cannot Track Merged Pull Request';
+            reaction = 'confused';
+        } else if (prRecord.state === 'closed' || prRecord.githubClosedAt) {
+            message = 'Cannot Track Closed Pull Request';
+            reaction = 'confused';
+        } else if (prRecord.isTracked) {
+            message = 'Pull Request is Already Tracked';
+        }
+
+        if (message) {
+            await postComment(
+                Number(payload.installationId),
+                payload.repoName,
+                payload.repoOwnerLogin,
+                payload.prNumber,
+                message,
+            );
             await addCommentReaction(
                 Number(payload.installationId),
                 payload.repoName,
                 payload.repoOwnerLogin,
                 payload.githubCommentId,
-                'confused',
+                reaction,
             );
-            console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is not found or already tracked`);
+
+            console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} cannot be tracked:`, message);
+            return;
         }
+
+        // At this point, simply mark PR as tracked
+        prRecord.isTracked = true;
+        await prRecord.save();
+
+        await addCommentReaction(
+            Number(payload.installationId),
+            payload.repoName,
+            payload.repoOwnerLogin,
+            payload.githubCommentId,
+            '+1',
+        );
+        console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now tracked`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
+        await addCommentReaction(
+            Number(payload.installationId),
+            payload.repoName,
+            payload.repoOwnerLogin,
+            payload.githubCommentId,
+            'confused',
+        );
     }
 }
