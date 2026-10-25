@@ -55,22 +55,26 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
         );
 
         if (prRecord) {
-            await addCommentReaction(
-                Number(payload.installationId),
-                payload.repoName,
-                payload.repoOwnerLogin,
-                payload.githubCommentId,
-                '+1',
-            );
+            if (payload.source === 'comment' && payload.githubCommentId) {
+                await addCommentReaction(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.githubCommentId,
+                    '+1',
+                );
+            }
             console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now untracked`);
         } else {
-            await addCommentReaction(
-                Number(payload.installationId),
-                payload.repoName,
-                payload.repoOwnerLogin,
-                payload.githubCommentId,
-                'confused',
-            );
+            if (payload.source === 'comment' && payload.githubCommentId) {
+                await addCommentReaction(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.githubCommentId,
+                    'confused',
+                );
+            }
             console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is not found or already untracked`);
         }
     } catch (error) {

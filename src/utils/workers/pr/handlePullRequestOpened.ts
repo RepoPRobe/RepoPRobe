@@ -104,6 +104,7 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
                     installationId: Number(payload.installationId),
                     repoName: payload.repoName,
                     repoOwnerLogin: payload.repoOwnerLogin,
+                    source: payload.source,
                 } satisfies ConflictDetectionScanPR, {
                     jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
                 });

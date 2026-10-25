@@ -49,6 +49,7 @@ export async function handlePullRequestEdited(payload: PullRequestEdited) {
                 repoName: payload.repoName,
                 repoOwnerLogin: payload.repoOwnerLogin,
                 prId: prRecord._id.toString(),
+                source: 'webhook',
             } satisfies ConflictDetectionScanPR, {
                 jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
             });

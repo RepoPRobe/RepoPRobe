@@ -60,13 +60,16 @@ export async function handleCommentTrack(payload: CommentTrack) {
                     payload.prNumber,
                     message,
                 );
-                await addCommentReaction(
-                    Number(payload.installationId),
-                    payload.repoName,
-                    payload.repoOwnerLogin,
-                    payload.githubCommentId,
-                    'confused',
-                );
+
+                if (payload.source === 'comment' && payload.githubCommentId) {
+                    await addCommentReaction(
+                        Number(payload.installationId),
+                        payload.repoName,
+                        payload.repoOwnerLogin,
+                        payload.githubCommentId,
+                        'confused',
+                    );
+                }
                 console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} cannot be tracked:`, message);
                 return;
             }
@@ -105,16 +108,19 @@ export async function handleCommentTrack(payload: CommentTrack) {
                 })),
                 prCreatedOn: pr.created_at,
                 prUpdatedAt: pr.updated_at,
+                source: payload.source,
             } satisfies PullRequestOpened, {
                 jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${payload.installationId}_${pr.id}`,
             });
-            await addCommentReaction(
-                Number(payload.installationId),
-                payload.repoName,
-                payload.repoOwnerLogin,
-                payload.githubCommentId,
-                '+1',
-            );
+            if (payload.source === 'comment' && payload.githubCommentId) {
+                await addCommentReaction(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.githubCommentId,
+                    '+1',
+                );
+            }
             console.log(`PR Not found, added to ${QUEUE_EVENTS.PULL_REQUEST.OPENED} queue for processing:`, payload.installationId, pr.id);
             return;
         }
@@ -139,13 +145,15 @@ export async function handleCommentTrack(payload: CommentTrack) {
                 payload.prNumber,
                 message,
             );
-            await addCommentReaction(
-                Number(payload.installationId),
-                payload.repoName,
-                payload.repoOwnerLogin,
-                payload.githubCommentId,
-                reaction,
-            );
+            if (payload.source === 'comment' && payload.githubCommentId) {
+                await addCommentReaction(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.githubCommentId,
+                    reaction,
+                );
+            }
 
             console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} cannot be tracked:`, message);
             return;
@@ -155,22 +163,26 @@ export async function handleCommentTrack(payload: CommentTrack) {
         prRecord.isTracked = true;
         await prRecord.save();
 
-        await addCommentReaction(
-            Number(payload.installationId),
-            payload.repoName,
-            payload.repoOwnerLogin,
-            payload.githubCommentId,
-            '+1',
-        );
+        if (payload.source === 'comment' && payload.githubCommentId) {
+            await addCommentReaction(
+                Number(payload.installationId),
+                payload.repoName,
+                payload.repoOwnerLogin,
+                payload.githubCommentId,
+                '+1',
+            );
+        }
         console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now tracked`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
-        await addCommentReaction(
-            Number(payload.installationId),
-            payload.repoName,
-            payload.repoOwnerLogin,
-            payload.githubCommentId,
-            'confused',
-        );
+        if (payload.source === 'comment' && payload.githubCommentId) {
+            await addCommentReaction(
+                Number(payload.installationId),
+                payload.repoName,
+                payload.repoOwnerLogin,
+                payload.githubCommentId,
+                'confused',
+            );
+        }
     }
 }

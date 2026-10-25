@@ -85,6 +85,7 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
                     installationId: Number(payload.installationId),
                     repoName: payload.repoName,
                     repoOwnerLogin: payload.repoOwnerLogin,
+                    source: 'webhook',
                 } satisfies ConflictDetectionScanPR, {
                     jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
                 });
