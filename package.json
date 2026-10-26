@@ -4,7 +4,9 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "queue:all": "tsx src/worker.ts"
+    "queue:all": "tsx src/worker.ts",
+    "migrate:tokens": "tsx src/scripts/encryptUserTokens.ts",
+    "test": "node --import tsx --experimental-test-module-mocks --test tests/*.test.ts"
   },
   "type": "module",
   "keywords": [],
@@ -30,6 +32,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.9.3",
+    "mongodb-memory-server": "^11.3.0",
     "smee-client": "^5.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"

@@ -53,6 +53,7 @@ export type InstallationRepositoriesRemoved = {
 }
 
 export type PullRequestOpened = {
+    replacementRecordId?: string;
     installationId: string;
     repositoryId: string;
     repoName: string;

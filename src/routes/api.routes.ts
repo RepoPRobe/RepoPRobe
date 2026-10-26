@@ -2,7 +2,7 @@ import express from 'express';
 import { User } from '../db/schema/User';
 import jwt from "jsonwebtoken";
 import cors from 'cors';
-import { refreshGithubToken } from '../utils/api/refreshAccessToken';
+import { refreshUser, userCredentials } from '../utils/auth/refreshUser';
 import { isValidObjectId, Types } from 'mongoose';
 import { Octokit } from 'octokit';
 import { GithubInstallation } from '../db/schema/GithubInstallation';
@@ -17,7 +17,6 @@ import { conflictDetectionQueue } from '../queues/conflict-detection.queue';
 import { PullRequestFile, PullRequestFileType } from '../db/schema/PullRequestFile';
 
 const apiRouter = express.Router();
-const refreshPromises = new Map<string, Promise<any>>();
 
 apiRouter.use(cors());
 apiRouter.use(express.json());
@@ -43,7 +42,12 @@ apiRouter.post('/github-login', async (req, res) => {
         typeof githubLogin !== 'string' ||
         !githubLogin ||
         typeof accessToken !== 'string' ||
-        !accessToken
+        !accessToken.trim() ||
+        typeof refreshToken !== 'string' || !refreshToken.trim() ||
+        !['number', 'string'].includes(typeof req.body.accessTokenExpiry) ||
+        !['number', 'string'].includes(typeof req.body.refreshTokenExpiry) ||
+        !Number.isFinite(accessTokenExpiry) || accessTokenExpiry <= Date.now() ||
+        !Number.isFinite(refreshTokenExpiry) || refreshTokenExpiry <= Date.now()
     ) {
         return res.status(400).json({
             success: false,
@@ -57,7 +61,7 @@ apiRouter.post('/github-login', async (req, res) => {
             const octokit = new Octokit({ auth: accessToken });
             ({ data: authenticatedGithubUser } = await octokit.rest.users.getAuthenticated());
         } catch (error) {
-            console.error('Unable to verify GitHub access token:', error);
+            console.error('Unable to verify GitHub access token');
             return res.status(401).json({
                 success: false,
                 message: 'Unable to verify GitHub access token',
@@ -78,14 +82,16 @@ apiRouter.post('/github-login', async (req, res) => {
                 name,
                 avatarUrl,
                 htmlUrl,
-                accessToken: String(accessToken ?? ''),
-                accessTokenExpiry: Number.isFinite(accessTokenExpiry) ? accessTokenExpiry : undefined,
-                refreshToken: String(refreshToken ?? ''),
-                refreshTokenExpiry: Number.isFinite(refreshTokenExpiry) ? refreshTokenExpiry : undefined,
+                accessToken,
+                accessTokenExpiry,
+                refreshToken,
+                refreshTokenExpiry,
+                $unset: { tokenRefreshLockId: 1, tokenRefreshLockUntil: 1 },
             },
             {
                 upsert: true,
                 new: true,
+                runValidators: true,
             }
         );
 
@@ -107,7 +113,7 @@ apiRouter.post('/github-login', async (req, res) => {
             message: 'Login Successful',
         });
     } catch (error) {
-        console.error('Error during GitHub login:', error);
+        console.error('Error during GitHub login');
         return res.status(500).json({
             success: false,
             message: 'Internal server error',
@@ -163,16 +169,13 @@ apiRouter.use(async (req, res, next) => {
         req.user = {
             userId: user._id.toString(),
             githubUserId: user.githubUserId,
-            accessToken: user.accessToken,
-            accessTokenExpiry: user.accessTokenExpiry,
-            refreshToken: user.refreshToken,
-            refreshTokenExpiry: user.refreshTokenExpiry,
+            ...userCredentials(user),
         };
 
         console.log('[MIDDLEWARE] Auth Passed.');
         next();
     } catch (error) {
-        console.error('Error loading authenticated user:', error);
+        console.error('Error loading authenticated user');
         return res.status(500).json({
             success: false,
             message: "Unable to authenticate user",
@@ -201,48 +204,10 @@ apiRouter.use(async (req, res, next) => {
         console.log('Access token expired or invalid, refreshing access token for user:', userId);
 
         try {
-            let existingRefreshReqPromise = refreshPromises.get(userId);
-            if (!existingRefreshReqPromise) {
-                existingRefreshReqPromise = refreshGithubToken(req.user.refreshToken);
-                refreshPromises.set(userId, existingRefreshReqPromise);
-                existingRefreshReqPromise.then(
-                    () => refreshPromises.delete(userId),
-                    () => refreshPromises.delete(userId),
-                );
-            }
-            const {
-                accessToken,
-                accessTokenExpiry,
-                refreshToken,
-                refreshTokenExpiry
-            } = await existingRefreshReqPromise;
-
-            console.log('Access token refreshed successfully for user:', req.user.userId);
-
-            const updatedUser = await User.findByIdAndUpdate(
-                req.user.userId,
-                {
-                    $set: {
-                        accessToken,
-                        accessTokenExpiry,
-                        refreshToken,
-                        refreshTokenExpiry,
-                    }
-                },
-                { new: true }
-            );
-            if (!updatedUser) {
-                throw new Error('User not found while saving refreshed GitHub tokens');
-            }
-            req.user = {
-                ...req.user,
-                accessToken: updatedUser.accessToken,
-                accessTokenExpiry: updatedUser.accessTokenExpiry,
-                refreshToken: updatedUser.refreshToken,
-                refreshTokenExpiry: updatedUser.refreshTokenExpiry,
-            }
+            const updatedUser = await refreshUser(userId);
+            req.user = { ...req.user, ...userCredentials(updatedUser) };
         } catch (error) {
-            console.log('Error refreshing access token:', error);
+            console.log('Error refreshing access token');
             return res.status(500).json({
                 success: false,
                 message: "Error refreshing access token, please login again to refresh the token",
@@ -662,7 +627,7 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
             });
         }
 
-        const repositoryRecord = await Repo.findById(repositoryId, { githubFullName: 1, githubId: 1, _id: 0 });
+        const repositoryRecord = await Repo.findById(repositoryId, { installationId: 1, githubFullName: 1, githubId: 1, _id: 0 });
         if (!repositoryRecord) {
             console.error('Repository not found for ID:', repositoryId);
             return res.status(404).json({
@@ -670,6 +635,13 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
                 message: 'Repository not found.',
             });
         }
+        if (repositoryRecord.installationId.toString() !== installation._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Repository does not belong to the selected installation.',
+            });
+        }
+
         const pullRequestRecord = await PullRequest.findOne({ installationId, prNumber, repoId: repositoryId });
         if (!pullRequestRecord) {
             console.error('Pull request record not found for PR number:', prNumber, 'in repository:', repositoryId);
@@ -748,8 +720,8 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
             isHeadBranchHeadShaChanged;
 
         if (isSyncNeeded) {
-            await PullRequest.deleteOne({ _id: pullRequestRecord._id });
             await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.OPENED, {
+                replacementRecordId: pullRequestRecord._id.toString(),
                 installationId: installation.installationId,
                 repositoryId: repositoryRecord.githubId,
                 repoOwnerLogin: repoOwner,
@@ -780,8 +752,10 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
                 prUpdatedAt: pullRequest.updated_at,
                 source: 'dashboard',
             } satisfies PullRequestOpened, {
-                jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${installation.installationId}_${pullRequest.id}`,
+                jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${installation.installationId}_${pullRequest.id}_${pullRequestRecord._id}`,
             });
+            // Only the old ID can be deleted, even if the worker has already created its replacement.
+            await PullRequest.deleteOne({ _id: pullRequestRecord._id });
 
             console.log(`PR changes detected, added to ${QUEUE_EVENTS.PULL_REQUEST.OPENED} queue for processing:`, installation.installationId, pullRequest.id);
             return res.status(200).json({
@@ -957,12 +931,19 @@ apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
             });
         }
 
-        const repositoryRecord = await Repo.findById(repositoryId, { githubFullName: 1, githubId: 1, _id: 0 });
+        const repositoryRecord = await Repo.findById(repositoryId, { installationId: 1, githubFullName: 1, githubId: 1, _id: 0 });
         if (!repositoryRecord) {
             console.error('Repository not found for ID:', repositoryId);
             return res.status(404).json({
                 success: false,
                 message: 'Repository not found.',
+            });
+        }
+
+        if (repositoryRecord.installationId.toString() !== installation._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Repository does not belong to the selected installation.',
             });
         }
 
@@ -978,14 +959,21 @@ apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
         const octokit = new Octokit({ auth: req.user?.accessToken });
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
 
-        const { data: pullRequest } = await octokit.rest.pulls.get({
-            owner: repoOwner,
-            repo: repoName,
-            pull_number: prNumber,
-        });
+        const [repoResponse, prResponse] = await Promise.allSettled([
+            octokit.rest.repos.get({ owner: repoOwner, repo: repoName }),
+            octokit.rest.pulls.get({ owner: repoOwner, repo: repoName, pull_number: prNumber }),
+        ]);
+        if (repoResponse.status === 'rejected' || !repoResponse.value.data.permissions?.push) {
+            return res.status(403).json({
+                success: false,
+                message: 'Insufficient permissions to retry pull request processing. Push access is required.',
+            });
+        }
+        if (prResponse.status === 'rejected') throw prResponse.reason;
+        const pullRequest = prResponse.value.data;
 
-        await PullRequest.deleteOne({ _id: pullRequestRecord._id });
         await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.OPENED, {
+            replacementRecordId: pullRequestRecord._id.toString(),
             installationId: installation.installationId,
             repositoryId: repositoryRecord.githubId,
             repoOwnerLogin: repoOwner,
@@ -1016,8 +1004,10 @@ apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
             prUpdatedAt: pullRequest.updated_at,
             source: 'dashboard',
         } satisfies PullRequestOpened, {
-            jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${installation.installationId}_${pullRequest.id}`,
+            jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${installation.installationId}_${pullRequest.id}_${pullRequestRecord._id}`,
         });
+        // Only the old ID can be deleted, even if the worker has already created its replacement.
+        await PullRequest.deleteOne({ _id: pullRequestRecord._id });
 
         console.log(`Retrying pull request processing for PR ${prNumber} in repo ${repositoryRecord.githubFullName} for installation ${installation._id}`);
         return res.status(200).json({
