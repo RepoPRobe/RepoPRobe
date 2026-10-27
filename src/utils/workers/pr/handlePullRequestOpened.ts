@@ -42,11 +42,14 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
         // A job can start before the API's post-enqueue cleanup. Remove only the old
         // record, then upsert the replacement so a retried job can resume safely.
         if (payload.replacementRecordId) {
-            await PullRequest.deleteOne({
+            const {deletedCount} = await PullRequest.deleteOne({
                 _id: payload.replacementRecordId,
                 repoId: repoRecord._id,
                 githubPrId: payload.prId,
             });
+            if(deletedCount > 0) {
+                await PullRequestFile.deleteMany({pullRequestId: payload.replacementRecordId});
+            }
         }
         const recordData = {
             repoId: repoRecord._id,

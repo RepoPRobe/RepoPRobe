@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { encryptUserTokens } from './db/migrations/encryptUserTokens';
 import { Webhooks } from '@octokit/webhooks';
 import express from 'express';
 import { connectDB } from './db/index.js';
@@ -691,7 +690,6 @@ process.on('unhandledRejection', (reason, promise) => {
 
 async function main() {
     await connectDB();
-    await encryptUserTokens();
     server.listen(PORT, () => console.log(`Listening to port ${PORT}`));
 }
 main();

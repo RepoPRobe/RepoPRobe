@@ -13,6 +13,14 @@ export function userCredentials(user: { accessToken: string; refreshToken: strin
     };
 }
 
+/**
+ * Refreshes a user's GitHub auth tokens and persists the renewed values.
+ *
+ * This function takes a user ID, acquires a short-lived lock to prevent concurrent
+ * refresh races, verifies the stored tokens are still valid, requests a fresh token
+ * pair from GitHub when needed, updates the user record in MongoDB, and releases the
+ * lock afterward. It retries briefly if another refresh is already in progress.
+ */
 async function refreshAndPersist(userId: string) {
     const lockId = randomUUID();
     const deadline = Date.now() + 15_000;
@@ -30,7 +38,7 @@ async function refreshAndPersist(userId: string) {
         try {
             const credentials = userCredentials(user);
             if (credentials.refreshTokenExpiry <= Date.now()) throw new Error('Refresh token expired');
-            if (credentials.accessTokenExpiry > Date.now() && credentials.accessToken.startsWith('ghu_')) return user;
+            if (credentials.accessTokenExpiry > Date.now()) return user;
             const tokens = await refreshGithubToken(credentials.refreshToken);
             const updatedUser = await User.findOneAndUpdate(
                 { _id: userId, tokenRefreshLockId: lockId },

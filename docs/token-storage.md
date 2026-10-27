@@ -32,10 +32,3 @@ the lock before calling GitHub. The HTTP request times out after 10 seconds; the
 lease expires after 60 seconds to recover from crashes. Conditional writes fence
 out holders whose lease was taken over or invalidated by a fresh login. Requests
 waiting longer than 15 seconds fail and can be retried.
-
-## Regression checks
-
-Use Node.js 24 or newer, run `npm install`, then `npm test`. Tests start a temporary
-MongoDB using mongodb-memory-server (the first run downloads a MongoDB binary),
-mock GitHub and queue boundaries, and shut down the database afterward. They do
-not require provider credentials or a production database.
