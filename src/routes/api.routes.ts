@@ -754,9 +754,6 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
             } satisfies PullRequestOpened, {
                 jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${installation.installationId}_${pullRequest.id}_${pullRequestRecord._id}`,
             });
-            // Only the old ID can be deleted, even if the worker has already created its replacement.
-            await PullRequest.deleteOne({ _id: pullRequestRecord._id });
-
             console.log(`PR changes detected, added to ${QUEUE_EVENTS.PULL_REQUEST.OPENED} queue for processing:`, installation.installationId, pullRequest.id);
             return res.status(200).json({
                 success: true,
@@ -1006,9 +1003,6 @@ apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
         } satisfies PullRequestOpened, {
             jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${installation.installationId}_${pullRequest.id}_${pullRequestRecord._id}`,
         });
-        // Only the old ID can be deleted, even if the worker has already created its replacement.
-        await PullRequest.deleteOne({ _id: pullRequestRecord._id });
-
         console.log(`Retrying pull request processing for PR ${prNumber} in repo ${repositoryRecord.githubFullName} for installation ${installation._id}`);
         return res.status(200).json({
             success: true,

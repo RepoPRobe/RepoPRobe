@@ -39,18 +39,6 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
             return;
         }
 
-        // A job can start before the API's post-enqueue cleanup. Remove only the old
-        // record, then upsert the replacement so a retried job can resume safely.
-        if (payload.replacementRecordId) {
-            const {deletedCount} = await PullRequest.deleteOne({
-                _id: payload.replacementRecordId,
-                repoId: repoRecord._id,
-                githubPrId: payload.prId,
-            });
-            if(deletedCount > 0) {
-                await PullRequestFile.deleteMany({pullRequestId: payload.replacementRecordId});
-            }
-        }
         const recordData = {
             repoId: repoRecord._id,
             installationId: installationRecord._id,
@@ -76,14 +64,27 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
             isTracked: true,
             processingStatus: 'processing' as const, // setting processing as here the next step is processing, so it makes no sense to set it as pending, as it will be processed immediately after this step
         };
-        const prRecord = payload.replacementRecordId
-            ? await PullRequest.findOneAndUpdate(
-                { repoId: repoRecord._id, githubPrId: payload.prId },
-                { $set: recordData },
-                { upsert: true, new: true, runValidators: true },
-            )
-            : await PullRequest.create(recordData);
+        const prRecord = await PullRequest.findOneAndUpdate(
+            { repoId: repoRecord._id, githubPrId: payload.prId },
+            { $set: recordData },
+            { upsert: true, new: true, runValidators: true },
+        );
         processingRecordId = prRecord._id;
+
+        if (payload.replacementRecordId) {
+            if (prRecord._id.toString() === payload.replacementRecordId) {
+                await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
+            } else {
+                const { deletedCount } = await PullRequest.deleteOne({
+                    _id: payload.replacementRecordId,
+                    repoId: repoRecord._id,
+                    githubPrId: payload.prId,
+                });
+                if (deletedCount > 0) {
+                    await PullRequestFile.deleteMany({ pullRequestId: payload.replacementRecordId });
+                }
+            }
+        }
 
         const octokit = await githubApp.getInstallationOctokit(parseInt(payload.installationId));
         const prFiles = await octokit.rest.pulls.listFiles({
@@ -95,9 +96,6 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
         if (prFiles.status === 200) {
             const convertedPatchObject = processPullRequestFiles(prFiles.data);
 
-            if (payload.replacementRecordId) {
-                await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
-            }
             await PullRequestFile.insertMany(
                 convertedPatchObject.map(patchObj => ({
                     pullRequestId: prRecord._id,
