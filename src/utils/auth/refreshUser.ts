@@ -38,7 +38,7 @@ async function refreshAndPersist(userId: string) {
         try {
             const credentials = userCredentials(user);
             if (credentials.refreshTokenExpiry <= Date.now()) throw new Error('Refresh token expired');
-            if (credentials.accessTokenExpiry > Date.now()) return user;
+            if (credentials.accessTokenExpiry > Date.now() && credentials.accessToken.startsWith('ghu_')) return user;
             const tokens = await refreshGithubToken(credentials.refreshToken);
             const updatedUser = await User.findOneAndUpdate(
                 { _id: userId, tokenRefreshLockId: lockId },
