@@ -53,6 +53,7 @@ export type InstallationRepositoriesRemoved = {
 }
 
 export type PullRequestOpened = {
+    replacementRecordId?: string;
     installationId: string;
     repositoryId: string;
     repoName: string;
@@ -75,6 +76,7 @@ export type PullRequestOpened = {
     }[];
     prCreatedOn: string;
     prUpdatedAt: string;
+    source: 'webhook' | 'dashboard' | 'comment';
 }
 
 export type PullRequestClosed = {
@@ -194,7 +196,8 @@ export type CommentTrack = {
     repoName: string;
     repoId: string;
     installationId: string;
-    githubCommentId: number;
+    githubCommentId?: number;
+    source: 'comment' | 'dashboard';
 }
 
 export type CommentUntrack = {
@@ -203,7 +206,8 @@ export type CommentUntrack = {
     repoName: string;
     repoId: string;
     installationId: string;
-    githubCommentId: number;
+    githubCommentId?: number;
+    source: 'comment' | 'dashboard';
 }
 
 export type CommentCheck = {
@@ -243,4 +247,5 @@ export type ConflictDetectionScanPR = {
     repoName: string;
     repoOwnerLogin: string;
     prId: string;
+    source: 'comment' | 'dashboard' | 'webhook';
 }

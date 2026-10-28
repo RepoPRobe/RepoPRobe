@@ -10,6 +10,7 @@ import { AllowedAuthorAssociations } from './utils/common/index.js';
 import { commentQueue } from './queues/comment.queue.js';
 import { addCommentReaction, SupportedCommentCommands } from './utils/common/comment.js';
 import { serverAdapter } from './bull-board.js';
+import { apiRouter } from './routes/api.routes.js';
 
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
 const PORT = process.env.PORT;
@@ -26,6 +27,7 @@ const webhooks = new Webhooks({ secret: githubWebhookSecret });
 
 // bull-board endpoint
 server.use('/admin/queues', serverAdapter.getRouter());
+server.use('/api', apiRouter);
 
 server.post("/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
     const signature = req.headers['x-hub-signature-256'] as string
@@ -231,6 +233,7 @@ webhooks.on("pull_request.opened", async ({ payload }) => {
             })),
             prCreatedOn: payload.pull_request.created_at,
             prUpdatedAt: payload.pull_request.updated_at,
+            source: 'webhook',
         } satisfies PullRequestOpened, {
             jobId: `${QUEUE_EVENTS.PULL_REQUEST.OPENED}_${payload.installation.id}_${payload.pull_request.id}`,
         });
@@ -610,6 +613,7 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
                         repoId: payload.repository.id.toString(),
                         installationId: payload.installation.id.toString(),
                         githubCommentId: payload.comment.id,
+                        source: 'comment',
                     } satisfies CommentTrack, {
                         jobId: `${QUEUE_EVENTS.COMMENT.TRACK}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
                     });
@@ -624,6 +628,7 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
                         repoId: payload.repository.id.toString(),
                         installationId: payload.installation.id.toString(),
                         githubCommentId: payload.comment.id,
+                        source: 'comment',
                     } satisfies CommentUntrack, {
                         jobId: `${QUEUE_EVENTS.COMMENT.UNTRACK}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
                     });

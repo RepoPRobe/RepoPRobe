@@ -84,6 +84,7 @@ export async function handleCommentCheck(payload: CommentCheck) {
             repoName: payload.repoName,
             repoOwnerLogin: payload.repoOwnerLogin,
             prId: prRecord._id.toString(),
+            source: 'comment',
         } satisfies ConflictDetectionScanPR, {
             jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
         });
