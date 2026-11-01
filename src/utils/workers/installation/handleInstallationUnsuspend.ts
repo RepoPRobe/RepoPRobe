@@ -1,5 +1,7 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { InstallationUnsuspend } from "../../../types/queue-payloads";
+import { logActivity } from "../../common/activityLog";
+import { QUEUE_EVENTS } from "../../../types/queue-events";
 
 export async function handleInstallationUnsuspend(payload: InstallationUnsuspend) {
     try {
@@ -14,11 +16,29 @@ export async function handleInstallationUnsuspend(payload: InstallationUnsuspend
             { projection: { _id: 1 } },
         );
         if (githubInstallation) {
+            await logActivity({
+                installationId: githubInstallation._id,
+                event: QUEUE_EVENTS.INSTALLATION.UNSUSPEND,
+                status: 'success',
+                message: 'GitHub App installation unsuspended',
+            });
             console.log(`Marked installation ${installationId} as unsuspended`);
         } else {
             console.log(`No GithubInstallation found for installation ${installationId}`);
         }
     } catch (error) {
         console.log("Error [installation.unsuspend]:", error)
+        const githubInstallation = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (githubInstallation) {
+            await logActivity({
+                installationId: githubInstallation._id,
+                event: QUEUE_EVENTS.INSTALLATION.UNSUSPEND,
+                status: 'error',
+                message: 'Failed to unsuspend GitHub App installation',
+            });
+        }
     }
 }

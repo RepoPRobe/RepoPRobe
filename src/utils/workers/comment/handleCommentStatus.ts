@@ -5,6 +5,7 @@ import { commentQueue } from "../../../queues/comment.queue";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { BotCommentCustom, CommentStatus } from "../../../types/queue-payloads";
 import { postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment";
+import { logActivity } from "../../common/activityLog";
 
 export async function handleCommentStatus(payload: CommentStatus) {
     const formatDate = (date: Date | null) => {
@@ -114,7 +115,33 @@ export async function handleCommentStatus(payload: CommentStatus) {
         } satisfies BotCommentCustom, {
             jobId: `${QUEUE_EVENTS.BOT_COMMENT.CUSTOM}_${prRecord._id}_${QUEUE_EVENTS.COMMENT.STATUS}_SUCCESS`,
         });
+        await logActivity({
+            installationId: installationRecord._id,
+            repoId: prRecord.repoId,
+            pullRequestId: prRecord._id,
+            event: QUEUE_EVENTS.COMMENT.STATUS,
+            status: 'success',
+            message: `Posted status for pull request #${payload.prNumber}`,
+        });
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.STATUS}:`, error);
+        const installationRecord = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (installationRecord) {
+            const prRecord = await PullRequest.findOne(
+                { installationId: installationRecord._id, prNumber: payload.prNumber },
+                { _id: 1, repoId: 1 },
+            );
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: prRecord?.repoId,
+                pullRequestId: prRecord?._id,
+                event: QUEUE_EVENTS.COMMENT.STATUS,
+                status: 'error',
+                message: `Failed to post status for pull request #${payload.prNumber}`,
+            });
+        }
     }
 }

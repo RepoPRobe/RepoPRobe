@@ -1,8 +1,8 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { Repo } from "../../../db/schema/Repo";
 import { InstallationDeleted } from "../../../types/queue-payloads";
-
-
+import { logActivity } from "../../common/activityLog";
+import { QUEUE_EVENTS } from "../../../types/queue-events";
 
 export async function handleInstallationDeleted(payload: InstallationDeleted) {
     try {
@@ -25,8 +25,27 @@ export async function handleInstallationDeleted(payload: InstallationDeleted) {
             { $set: { deletedAt: new Date() } }
         );
 
+        await logActivity({
+            installationId: githubInstallation._id,
+            event: QUEUE_EVENTS.INSTALLATION.DELETED,
+            status: 'success',
+            message: 'GitHub App installation deleted',
+        });
+
         console.log(`Marked repos as deleted for installation ${payload.installationId}`);
     } catch (error) {
         console.log("Error [installation.deleted]:", error);
+        const githubInstallation = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (githubInstallation) {
+            await logActivity({
+                installationId: githubInstallation._id,
+                event: QUEUE_EVENTS.INSTALLATION.DELETED,
+                status: 'error',
+                message: 'Failed to delete GitHub App installation',
+            });
+        }
     }
 }

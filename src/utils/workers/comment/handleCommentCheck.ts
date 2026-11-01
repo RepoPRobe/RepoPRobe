@@ -5,6 +5,7 @@ import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { CommentCheck, ConflictDetectionScanPR } from "../../../types/queue-payloads";
 import { addCommentReaction, postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment";
+import { logActivity } from "../../common/activityLog";
 
 export async function handleCommentCheck(payload: CommentCheck) {
     try {
@@ -91,5 +92,22 @@ export async function handleCommentCheck(payload: CommentCheck) {
         console.log(`Conflict detection scan job added for PR ${payload.prNumber} in repo ${payload.repoName} for installation ${installationRecord._id}`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.CHECK}:`, error);
+        const installationRecord = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (installationRecord) {
+            const repoRecord = await Repo.findOne(
+                { installationId: installationRecord._id, githubId: payload.repoId },
+                { _id: 1 },
+            );
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: repoRecord?._id,
+                event: QUEUE_EVENTS.COMMENT.CHECK,
+                status: 'error',
+                message: `Failed to check pull request #${payload.prNumber}`,
+            });
+        }
     }
 }

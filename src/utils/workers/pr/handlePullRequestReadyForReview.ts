@@ -2,6 +2,7 @@ import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { PullRequest } from "../../../db/schema/PullRequest";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { PullRequestReadyForReview } from "../../../types/queue-payloads";
+import { logActivity } from "../../common/activityLog";
 
 export async function handlePullRequestReadyForReview(payload: PullRequestReadyForReview) {
     try {
@@ -18,7 +19,7 @@ export async function handlePullRequestReadyForReview(payload: PullRequestReadyF
             return;
         }
 
-        await PullRequest.updateOne(
+        const prRecord = await PullRequest.findOneAndUpdate(
             {
                 installationId: installationRecord._id,
                 githubPrId: payload.prId,
@@ -30,8 +31,40 @@ export async function handlePullRequestReadyForReview(payload: PullRequestReadyF
                     githubUpdatedAt: payload.updatedAt,
                 }
             },
-        )
+            { projection: { _id: 1, repoId: 1, prNumber: 1 } },
+        );
+
+        if (prRecord) {
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: prRecord.repoId,
+                pullRequestId: prRecord._id,
+                event: QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW,
+                status: 'success',
+                message: `Pull request #${prRecord.prNumber} marked ready for review`,
+            });
+        }
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW}]:`, error);
+        const installationRecord = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (installationRecord) {
+            const prRecord = await PullRequest.findOne(
+                { installationId: installationRecord._id, githubPrId: payload.prId },
+                { _id: 1, repoId: 1, prNumber: 1 },
+            );
+            if (prRecord) {
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: prRecord.repoId,
+                    pullRequestId: prRecord._id,
+                    event: QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW,
+                    status: 'error',
+                    message: `Failed to mark pull request #${prRecord.prNumber} ready for review`,
+                });
+            }
+        }
     }
 }

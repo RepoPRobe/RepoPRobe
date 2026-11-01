@@ -3,8 +3,12 @@ import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { InstallationCreated } from "../../../types/queue-payloads";
 import { Repo } from "../../../db/schema/Repo";
 import { RepoConfig } from "../../../db/schema/RepoConfig";
+import { logActivity, LogActivityInput } from "../../common/activityLog";
+import { QUEUE_EVENTS } from "../../../types/queue-events";
 
 export async function handleInstallationCreated(payload: InstallationCreated) {
+    let installationDocId: Types.ObjectId | undefined;
+    const childActivityLogs: LogActivityInput[] = [];
     try {
         const githubInstallation = await GithubInstallation.findOneAndUpdate(
             { installationId: payload.installationId },
@@ -25,6 +29,7 @@ export async function handleInstallationCreated(payload: InstallationCreated) {
             },
             { upsert: true, returnDocument: "after", projection: { _id: 1 } },
         );
+        installationDocId = githubInstallation._id;
 
         const repos = payload.repositories ?? [];
         if (repos.length > 0) {
@@ -59,11 +64,43 @@ export async function handleInstallationCreated(payload: InstallationCreated) {
                         repoId: repoId,
                     }))
                 )
+                childActivityLogs.push(...reposToCreateConfig.map(repoId => ({
+                    installationId: githubInstallation._id,
+                    repoId,
+                    event: QUEUE_EVENTS.REPO.ADDED,
+                    status: 'success',
+                    message: 'Repository added to installation',
+                } satisfies LogActivityInput)));
             }
 
             console.log(`Inserted ${repos.length} repos for installation ${payload.installationId}`);
         }
+
+        const installationCreatedLogId = await logActivity({
+            installationId: githubInstallation._id,
+            event: QUEUE_EVENTS.INSTALLATION.CREATED,
+            status: 'success',
+            message: 'GitHub App installation created',
+            metadata: {
+                repositoryCount: repos.length,
+                repositorySelection: payload.installationRepositorySelection,
+            },
+        });
+        if (installationCreatedLogId) {
+            await Promise.all(childActivityLogs.map(log => logActivity({
+                ...log,
+                parentLogId: installationCreatedLogId,
+            } satisfies LogActivityInput)));
+        }
     } catch (error) {
         console.log("Error [installation.created]:", error);
+        if (installationDocId) {
+            await logActivity({
+                installationId: installationDocId,
+                event: QUEUE_EVENTS.INSTALLATION.CREATED,
+                status: 'error',
+                message: 'Failed to process GitHub App installation',
+            });
+        }
     }
 }

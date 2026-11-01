@@ -2,6 +2,7 @@ import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { PullRequest } from "../../../db/schema/PullRequest";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { PullRequestClosed } from "../../../types/queue-payloads";
+import { logActivity } from "../../common/activityLog";
 
 export async function handlePullRequestClosed(payload: PullRequestClosed) {
     try {
@@ -18,7 +19,7 @@ export async function handlePullRequestClosed(payload: PullRequestClosed) {
             return;
         }
 
-        const res = await PullRequest.updateOne(
+        const prRecord = await PullRequest.findOneAndUpdate(
             {
                 installationId: installationRecord._id,
                 githubPrId: payload.prId,
@@ -30,17 +31,47 @@ export async function handlePullRequestClosed(payload: PullRequestClosed) {
                     githubUpdatedAt: payload.updatedAt,
                     githubMergedAt: payload.mergedAt ?? null,
                 }
-            }
+            },
+            { projection: { _id: 1, repoId: 1, prNumber: 1 } },
         );
 
-        if (res.matchedCount === 0) {
+        if (!prRecord) {
             console.log(`No PR record found for installation ${payload.installationId} and PR ${payload.prId}`);
-        } else if (res.modifiedCount === 0) {
-            console.log(`PR record found for installation ${payload.installationId} and PR ${payload.prId} but no changes made`);
-        } else if (res.modifiedCount > 0) {
+        } else {
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: prRecord.repoId,
+                pullRequestId: prRecord._id,
+                event: QUEUE_EVENTS.PULL_REQUEST.CLOSED,
+                status: 'success',
+                message: payload.prState === 'merged'
+                    ? `Pull request #${prRecord.prNumber} merged`
+                    : `Pull request #${prRecord.prNumber} closed`,
+                metadata: { prState: payload.prState },
+            });
             console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId}`);
         }
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.CLOSED}]:`, error);
+        const installationRecord = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (installationRecord) {
+            const prRecord = await PullRequest.findOne(
+                { installationId: installationRecord._id, githubPrId: payload.prId },
+                { _id: 1, repoId: 1, prNumber: 1 },
+            );
+            if (prRecord) {
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: prRecord.repoId,
+                    pullRequestId: prRecord._id,
+                    event: QUEUE_EVENTS.PULL_REQUEST.CLOSED,
+                    status: 'error',
+                    message: `Failed to close pull request #${prRecord.prNumber}`,
+                });
+            }
+        }
     }
 }

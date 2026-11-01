@@ -15,6 +15,7 @@ import { CommentTrack, CommentUntrack, ConflictDetectionScanPR, PullRequestOpene
 import { pullRequestQueue } from '../queues/pull-request.queue';
 import { conflictDetectionQueue } from '../queues/conflict-detection.queue';
 import { PullRequestFile, PullRequestFileType } from '../db/schema/PullRequestFile';
+import { logActivity } from '../utils/common/activityLog';
 
 const apiRouter = express.Router();
 
@@ -792,6 +793,25 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
                 },
             },
         );
+
+        await logActivity({
+            installationId: installation._id,
+            repoId: pullRequestRecord.repoId,
+            pullRequestId: pullRequestRecord._id,
+            event: QUEUE_EVENTS.PULL_REQUEST.SYNCED,
+            status: 'success',
+            message: `Synced pull request #${prNumber} metadata from GitHub`,
+            metadata: {
+                source: 'dashboard',
+                isTitleChanged,
+                isStateChanged,
+                isDraftChanged,
+                isBaseBranchChanged,
+                isBaseBranchHeadShaChanged,
+                isAssigneesChanged,
+                isLabelsChanged,
+            },
+        });
 
         const conflictsNeedsRefreshed = isBaseBranchChanged || isBaseBranchHeadShaChanged;
         if (conflictsNeedsRefreshed) {
