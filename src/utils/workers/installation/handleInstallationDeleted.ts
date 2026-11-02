@@ -35,17 +35,21 @@ export async function handleInstallationDeleted(payload: InstallationDeleted) {
         console.log(`Marked repos as deleted for installation ${payload.installationId}`);
     } catch (error) {
         console.log("Error [installation.deleted]:", error);
-        const githubInstallation = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (githubInstallation) {
-            await logActivity({
-                installationId: githubInstallation._id,
-                event: QUEUE_EVENTS.INSTALLATION.DELETED,
-                status: 'error',
-                message: 'Failed to delete GitHub App installation',
-            });
+        try {
+            const githubInstallation = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
+            );
+            if (githubInstallation) {
+                await logActivity({
+                    installationId: githubInstallation._id,
+                    event: QUEUE_EVENTS.INSTALLATION.DELETED,
+                    status: 'error',
+                    message: 'Failed to delete GitHub App installation',
+                });
+            }
+        } catch (logError) {
+            console.log("Error logging activity for installation.deleted:", logError);
         }
     }
 }

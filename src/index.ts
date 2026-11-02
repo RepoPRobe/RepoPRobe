@@ -561,7 +561,7 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
         }
 
         const commandRegex = new RegExp(
-            `^@repoprobe\\s+(${SupportedCommentCommands.join('|')})\\b`,
+            `^@repoprobe\\s+(${SupportedCommentCommands.join('|')})(?=\\s|$)`,
             'i'
         );
         const match = commandRegex.exec(payload.comment.body);

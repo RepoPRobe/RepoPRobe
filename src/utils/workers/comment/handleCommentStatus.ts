@@ -1,14 +1,15 @@
 import { Conflict } from "../../../db/schema/Conflict";
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
+import { GithubInstallation, GithubInstallationType } from "../../../db/schema/GithubInstallation";
+import { PullRequest, PullRequestType } from "../../../db/schema/PullRequest";
 import { commentQueue } from "../../../queues/comment.queue";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { BotCommentCustom, CommentStatus } from "../../../types/queue-payloads";
 import { postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment";
 import { logActivity } from "../../common/activityLog";
+import { Repo, RepoType } from "../../../db/schema/Repo";
 
 export async function handleCommentStatus(payload: CommentStatus) {
-    const formatDate = (date: Date | null) => {
+    const formatDate = (date?: Date | null) => {
         if (!date) return 'N/A'
         const diff = Date.now() - new Date(date).getTime()
         const minutes = Math.floor(diff / 60000)
@@ -20,26 +21,67 @@ export async function handleCommentStatus(payload: CommentStatus) {
         return `${days} day${days > 1 ? 's' : ''} ago`
     }
 
-    try {
-        const installationRecord = await GithubInstallation.findOne(
-            {
-                installationId: payload.installationId,
-                suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
-            },
-            { _id: 1 },
-        );
+    const resolveStatusContext = async (includeFullPr = true) => {
+        if (!installationRecord) {
+            installationRecord = await GithubInstallation.findOne(
+                {
+                    installationId: payload.installationId,
+                    suspendedAt: { $eq: null },
+                    deletedAt: { $eq: null },
+                },
+                { _id: 1 },
+            );
+        }
         if (!installationRecord) {
             console.log(`No installation record found for installation ${payload.installationId}`);
-            return;
+            return null;
+        }
+        if (!repoRecord) {
+            repoRecord = await Repo.findOne(
+                {
+                    installationId: installationRecord._id,
+                    githubFullName: `${payload.repoOwnerLogin}/${payload.repoName}`,
+                },
+                { _id: 1 },
+            );
+        }
+        if (!repoRecord) {
+            console.log(`No repo record found for ${payload.repoOwnerLogin}/${payload.repoName} in installation ${installationRecord._id}`);
+            return null;
+        }
+        if (!prRecord) {
+            prRecord = await PullRequest.findOne(
+                {
+                    installationId: installationRecord._id,
+                    repoId: repoRecord._id,
+                    prNumber: payload.prNumber,
+                },
+                includeFullPr ? undefined : { _id: 1, repoId: 1 },
+            );
+        }
+        if (!prRecord) {
+            console.log(`No PR record found for PR ${payload.prNumber} in installation ${installationRecord._id}`);
+            return null;
         }
 
-        const prRecord = await PullRequest.findOne({
-            installationId: installationRecord._id,
-            prNumber: payload.prNumber,
-        });
-        if (!prRecord || !prRecord.isTracked) {
-            if (!prRecord) console.log(`No PR record found for PR ${payload.prNumber} in installation ${installationRecord._id}`);
+        return { installation: installationRecord, repo: repoRecord, pr: prRecord };
+    };
+
+    let installationRecord: GithubInstallationType | null;
+    let repoRecord: RepoType | null;
+    let prRecord: PullRequestType | null;
+
+    try {
+        const context = await resolveStatusContext();
+        if (!context) return;
+
+        installationRecord = context.installation;
+        repoRecord = context.repo;
+        prRecord = context.pr;
+
+        if (!prRecord) return;
+
+        if (!prRecord.isTracked) {
             await postComment(
                 Number(payload.installationId),
                 payload.repoName,
@@ -125,23 +167,17 @@ export async function handleCommentStatus(payload: CommentStatus) {
         });
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.STATUS}:`, error);
-        const installationRecord = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (installationRecord) {
-            const prRecord = await PullRequest.findOne(
-                { installationId: installationRecord._id, prNumber: payload.prNumber },
-                { _id: 1, repoId: 1 },
-            );
-            await logActivity({
-                installationId: installationRecord._id,
-                repoId: prRecord?.repoId,
-                pullRequestId: prRecord?._id,
-                event: QUEUE_EVENTS.COMMENT.STATUS,
-                status: 'error',
-                message: `Failed to post status for pull request #${payload.prNumber}`,
-            });
-        }
+
+        const context = await resolveStatusContext(false);
+        if (!context) return;
+
+        await logActivity({
+            installationId: context.installation._id,
+            repoId: context.pr.repoId,
+            pullRequestId: context.pr._id,
+            event: QUEUE_EVENTS.COMMENT.STATUS,
+            status: 'error',
+            message: `Failed to post status for pull request #${payload.prNumber}`,
+        });
     }
 }
