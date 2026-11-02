@@ -40,7 +40,7 @@ export async function handleCommentStatus(payload: CommentStatus) {
             repoRecord = await Repo.findOne(
                 {
                     installationId: installationRecord._id,
-                    githubFullName: `${payload.repoOwnerLogin}/${payload.repoName}`,
+                    githubId: payload.repoId,
                 },
                 { _id: 1 },
             );
