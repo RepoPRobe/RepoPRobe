@@ -7,6 +7,7 @@ import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { ConflictDetectionScanPR, PullRequestSynchronize } from "../../../types/queue-payloads";
 import { PullRequestFile } from "../../../db/schema/PullRequestFile";
 import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue";
+import { logActivity } from "../../common/activityLog";
 
 export async function handlePullRequestSynchronize(payload: PullRequestSynchronize) {
     try {
@@ -36,13 +37,26 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
                 },
             },
             {
-                projection: { _id: 1 },
+                projection: { _id: 1, repoId: 1, prNumber: 1 },
             }
         );
         if (!prRecord) {
             console.log(`No PR record found for installation ${payload.installationId} and PR ${payload.prId}`);
             return;
         }
+
+        await logActivity({
+            installationId: installationRecord._id,
+            repoId: prRecord.repoId,
+            pullRequestId: prRecord._id,
+            event: QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE,
+            status: 'info',
+            message: `Synchronizing pull request #${payload.prNumber}`,
+            metadata: {
+                beforeCommitSha: payload.beforeCommitSha,
+                afterCommitSha: payload.afterCommitSha,
+            },
+        });
 
         const octokit = await githubApp.getInstallationOctokit(parseInt(payload.installationId));
         const prFilesResponse = await octokit.rest.pulls.listFiles({
@@ -90,6 +104,18 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
                     jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
                 });
                 console.log(`Conflict detection scan job added for PR ${payload.prNumber} in repo ${payload.repoName} for installation ${installationRecord._id}`);
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: prRecord.repoId,
+                    pullRequestId: prRecord._id,
+                    event: QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE,
+                    status: 'success',
+                    message: `Synchronized pull request #${payload.prNumber} and queued conflict scan`,
+                    metadata: {
+                        beforeCommitSha: payload.beforeCommitSha,
+                        afterCommitSha: payload.afterCommitSha,
+                    },
+                });
             }).catch(async (err) => {
                 await PullRequest.updateOne(
                     { _id: prRecord._id },
@@ -99,14 +125,67 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
                         },
                     }
                 );
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: prRecord.repoId,
+                    pullRequestId: prRecord._id,
+                    event: QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE,
+                    status: 'error',
+                    message: `Failed to synchronize pull request #${payload.prNumber} files`,
+                    metadata: {
+                        beforeCommitSha: payload.beforeCommitSha,
+                        afterCommitSha: payload.afterCommitSha,
+                    },
+                });
                 console.log(`Error synchronizing PR files for installation ${payload.installationId} and PR ${payload.prId} from ${payload.beforeCommitSha} to ${payload.afterCommitSha}:`, err);
             });
 
             console.log(`Successfully synchronized PR files for installation ${payload.installationId} and PR ${payload.prId} from ${payload.beforeCommitSha} to ${payload.afterCommitSha}`);
         } else {
             console.log(`Failed to fetch PR files for installation ${payload.installationId} and PR ${payload.prId} from ${payload.beforeCommitSha} to ${payload.afterCommitSha}. Status: ${prFilesResponse.status}`);
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: prRecord.repoId,
+                pullRequestId: prRecord._id,
+                event: QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE,
+                status: 'error',
+                message: `Failed to fetch files while synchronizing pull request #${payload.prNumber}`,
+                metadata: {
+                    beforeCommitSha: payload.beforeCommitSha,
+                    afterCommitSha: payload.afterCommitSha,
+                    status: prFilesResponse.status,
+                },
+            });
         }
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE}]:`, error);
+        try {
+            const installationRecord = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
+            );
+            if (installationRecord) {
+                const prRecord = await PullRequest.findOne(
+                    { installationId: installationRecord._id, githubPrId: payload.prId },
+                    { _id: 1, repoId: 1 },
+                );
+                if (prRecord) {
+                    await logActivity({
+                        installationId: installationRecord._id,
+                        repoId: prRecord.repoId,
+                        pullRequestId: prRecord._id,
+                        event: QUEUE_EVENTS.PULL_REQUEST.SYNCHRONIZE,
+                        status: 'error',
+                        message: `Failed to synchronize pull request #${payload.prNumber}`,
+                        metadata: {
+                            beforeCommitSha: payload.beforeCommitSha,
+                            afterCommitSha: payload.afterCommitSha,
+                        },
+                    });
+                }
+            }
+        } catch (logError) {
+            console.log("Error while logging activity for pull_request.synchronize:", logError);
+        }
     }
 }

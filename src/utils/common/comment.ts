@@ -33,13 +33,17 @@ export async function addCommentReaction(
     commentId: number,
     content: 'eyes' | '+1' | '-1' | 'laugh' | 'confused' | 'heart' | 'hooray' | 'rocket'
 ) {
-    const octokit = await githubApp.getInstallationOctokit(installationId);
-    await octokit.rest.reactions.createForIssueComment({
-        owner: repoOwnerLogin,
-        repo: repoName,
-        comment_id: commentId,
-        content: content,
-    });
+    try {
+        const octokit = await githubApp.getInstallationOctokit(installationId);
+        await octokit.rest.reactions.createForIssueComment({
+            owner: repoOwnerLogin,
+            repo: repoName,
+            comment_id: commentId,
+            content: content,
+        });
+    } catch (error) {
+        console.error(`Failed to add reaction '${content}' to comment ${commentId} in repo ${repoOwnerLogin}/${repoName}:`, error);
+    }
 }
 
 export const PR_NOT_TRACKED_COMMENT_MARKDOWN = [

@@ -6,6 +6,7 @@ import { pullRequestQueue } from "../../../queues/pull-request.queue";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { CommentTrack, PullRequestOpened } from "../../../types/queue-payloads";
 import { addCommentReaction, postComment } from "../../common/comment";
+import { logActivity } from "../../common/activityLog";
 
 export async function handleCommentTrack(payload: CommentTrack) {
     try {
@@ -172,6 +173,15 @@ export async function handleCommentTrack(payload: CommentTrack) {
                 '+1',
             );
         }
+        await logActivity({
+            installationId: installationRecord._id,
+            repoId: repoRecord._id,
+            pullRequestId: prRecord._id,
+            event: QUEUE_EVENTS.COMMENT.TRACK,
+            status: 'success',
+            message: `Pull request #${payload.prNumber} is now tracked`,
+            metadata: { source: payload.source },
+        });
         console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now tracked`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
@@ -183,6 +193,29 @@ export async function handleCommentTrack(payload: CommentTrack) {
                 payload.githubCommentId,
                 'confused',
             );
+        }
+
+        try {
+            const installationRecord = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
+            );
+            if (installationRecord) {
+                const repoRecord = await Repo.findOne(
+                    { installationId: installationRecord._id, githubId: payload.repoId },
+                    { _id: 1 },
+                );
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: repoRecord?._id,
+                    event: QUEUE_EVENTS.COMMENT.TRACK,
+                    status: 'error',
+                    message: `Failed to track pull request #${payload.prNumber}`,
+                    metadata: { source: payload.source },
+                });
+            }
+        } catch (error) {
+            console.log(`Error logging activity for ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
         }
     }
 }

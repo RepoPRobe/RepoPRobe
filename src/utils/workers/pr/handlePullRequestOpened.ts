@@ -7,6 +7,7 @@ import { processPullRequestFiles } from "../../../github/utils/file-patch";
 import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { ConflictDetectionScanPR, PullRequestOpened } from "../../../types/queue-payloads";
+import { logActivity } from "../../common/activityLog";
 
 export async function handlePullRequestOpened(payload: PullRequestOpened) {
     let processingRecordId;
@@ -71,6 +72,19 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
         );
         processingRecordId = prRecord._id;
 
+        await logActivity({
+            installationId: installationRecord._id,
+            repoId: repoRecord._id,
+            pullRequestId: prRecord._id,
+            event: QUEUE_EVENTS.PULL_REQUEST.OPENED,
+            status: 'info',
+            message: `Processing pull request #${payload.prNumber}`,
+            metadata: {
+                source: payload.source,
+                replacementRecordId: payload.replacementRecordId,
+            },
+        });
+
         if (payload.replacementRecordId) {
             if (prRecord._id.toString() === payload.replacementRecordId) {
                 await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
@@ -131,12 +145,47 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
                 jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
             });
             console.log(`Conflict detection scan job added for PR ${payload.prNumber} in repo ${payload.repoName} for installation ${installationRecord._id}`);
+
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: repoRecord._id,
+                pullRequestId: prRecord._id,
+                event: QUEUE_EVENTS.PULL_REQUEST.OPENED,
+                status: 'success',
+                message: `Processed pull request #${payload.prNumber} and queued conflict scan`,
+                metadata: {
+                    source: payload.source,
+                    replacementRecordId: payload.replacementRecordId,
+                },
+            });
         } else {
             throw new Error('Unable to fetch pull request files');
         }
     } catch (error) {
         if (processingRecordId) {
-            await PullRequest.updateOne({ _id: processingRecordId }, { $set: { processingStatus: 'error' } });
+            try {
+                const failedPr = await PullRequest.findByIdAndUpdate(
+                    processingRecordId,
+                    { $set: { processingStatus: 'error' } },
+                    { projection: { installationId: 1, repoId: 1 } },
+                );
+                if (failedPr) {
+                    await logActivity({
+                        installationId: failedPr.installationId,
+                        repoId: failedPr.repoId,
+                        pullRequestId: processingRecordId,
+                        event: QUEUE_EVENTS.PULL_REQUEST.OPENED,
+                        status: 'error',
+                        message: `Failed to process pull request #${payload.prNumber}`,
+                        metadata: {
+                            source: payload.source,
+                            replacementRecordId: payload.replacementRecordId,
+                        },
+                    });
+                }
+            } catch (logError) {
+                console.log("Error while logging activity for pull_request.opened:", logError);
+            }
         }
         throw error;
     }

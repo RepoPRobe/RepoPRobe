@@ -9,6 +9,11 @@ export const QUEUE_EVENTS = {
         ADDED: 'installation_repositories.added',
         REMOVED: 'installation_repositories.removed',
     },
+    REPO: {
+        ADDED: 'repo.added',
+        RESTORED: 'repo.restored',
+        REMOVED: 'repo.removed',
+    },
     PULL_REQUEST: {
         OPENED: 'pull_request.opened',
         CLOSED: 'pull_request.closed',
@@ -21,6 +26,7 @@ export const QUEUE_EVENTS = {
         UNLABELED: 'pull_request.unlabeled',
         ASSIGNED: 'pull_request.assigned',
         UNASSIGNED: 'pull_request.unassigned',
+        SYNCED: 'pull_request.synced',
     },
     COMMENT: {
         HELP: 'comment.help',

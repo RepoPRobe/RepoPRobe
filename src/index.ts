@@ -560,23 +560,23 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
             return;
         }
 
-        // react the comment with eyes emoji
-        addCommentReaction(
-            payload.installation.id,
-            payload.repository.name,
-            payload.repository.owner.login,
-            payload.comment.id,
-            'eyes',
-        ).catch(err => {
-            console.log(`Error adding eyes reaction to comment ${payload.comment.id}:`, err);
-        });
-
         const commandRegex = new RegExp(
-            `^@repoprobe\\s+(${SupportedCommentCommands.join('|')})\\b`,
+            `^@repoprobe\\s+(${SupportedCommentCommands.join('|')})(?=\\s|$)`,
             'i'
         );
         const match = commandRegex.exec(payload.comment.body);
         if (match) {
+            // react the comment with eyes emoji
+            addCommentReaction(
+                payload.installation.id,
+                payload.repository.name,
+                payload.repository.owner.login,
+                payload.comment.id,
+                'eyes',
+            ).catch(err => {
+                console.log(`Error adding eyes reaction to comment ${payload.comment.id}:`, err);
+            });
+
             const command = match[1];
 
             switch (command) {

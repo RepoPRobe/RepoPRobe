@@ -2,6 +2,7 @@ import { GithubInstallation } from "../../../db/schema/GithubInstallation";
 import { PullRequest } from "../../../db/schema/PullRequest";
 import { QUEUE_EVENTS } from "../../../types/queue-events";
 import { PullRequestReopened } from "../../../types/queue-payloads";
+import { logActivity } from "../../common/activityLog";
 
 export async function handlePullRequestReopened(payload: PullRequestReopened) {
     /**
@@ -23,7 +24,7 @@ export async function handlePullRequestReopened(payload: PullRequestReopened) {
             return;
         }
 
-        const res = await PullRequest.updateOne(
+        const prRecord = await PullRequest.findOneAndUpdate(
             {
                 installationId: installationRecord._id,
                 githubPrId: payload.prId,
@@ -33,17 +34,44 @@ export async function handlePullRequestReopened(payload: PullRequestReopened) {
                     state: payload.prState,
                     githubUpdatedAt: payload.updatedAt,
                 }
-            }
+            },
+            { projection: { _id: 1, repoId: 1, prNumber: 1 } },
         );
 
-        if (res.matchedCount === 0) {
+        if (!prRecord) {
             console.log(`No PR record found for installation ${payload.installationId} and PR ${payload.prId}`);
-        } else if (res.modifiedCount === 0) {
-            console.log(`PR record found for installation ${payload.installationId} and PR ${payload.prId} but no changes made`);
-        } else if (res.modifiedCount > 0) {
+        } else {
+            await logActivity({
+                installationId: installationRecord._id,
+                repoId: prRecord.repoId,
+                pullRequestId: prRecord._id,
+                event: QUEUE_EVENTS.PULL_REQUEST.REOPENED,
+                status: 'success',
+                message: `Pull request #${prRecord.prNumber} reopened`,
+            });
             console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId}`);
         }
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.REOPENED}]:`, error);
+        const installationRecord = await GithubInstallation.findOne(
+            { installationId: payload.installationId },
+            { _id: 1 },
+        );
+        if (installationRecord) {
+            const prRecord = await PullRequest.findOne(
+                { installationId: installationRecord._id, githubPrId: payload.prId },
+                { _id: 1, repoId: 1, prNumber: 1 },
+            );
+            if (prRecord) {
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: prRecord.repoId,
+                    pullRequestId: prRecord._id,
+                    event: QUEUE_EVENTS.PULL_REQUEST.REOPENED,
+                    status: 'error',
+                    message: `Failed to reopen pull request #${prRecord.prNumber}`,
+                });
+            }
+        }
     }
 }
