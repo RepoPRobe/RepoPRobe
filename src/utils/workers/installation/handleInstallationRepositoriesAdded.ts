@@ -171,17 +171,21 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
 
     } catch (error) {
         console.log("Error [installation_repositories.added]:", error);
-        const installationDoc = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (installationDoc) {
-            await logActivity({
-                installationId: installationDoc._id,
-                event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED,
-                status: 'error',
-                message: 'Failed to process repositories added to installation',
-            });
+        try {
+            const installationDoc = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
+            );
+            if (installationDoc) {
+                await logActivity({
+                    installationId: installationDoc._id,
+                    event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED,
+                    status: 'error',
+                    message: 'Failed to process repositories added to installation',
+                });
+            }
+        } catch (logError) {
+            console.log("Error while logging activity for installation_repositories.added:", logError);
         }
     }
 }

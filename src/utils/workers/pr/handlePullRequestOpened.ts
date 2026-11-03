@@ -163,24 +163,28 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
         }
     } catch (error) {
         if (processingRecordId) {
-            const failedPr = await PullRequest.findByIdAndUpdate(
-                processingRecordId,
-                { $set: { processingStatus: 'error' } },
-                { projection: { installationId: 1, repoId: 1 } },
-            );
-            if (failedPr) {
-                await logActivity({
-                    installationId: failedPr.installationId,
-                    repoId: failedPr.repoId,
-                    pullRequestId: processingRecordId,
-                    event: QUEUE_EVENTS.PULL_REQUEST.OPENED,
-                    status: 'error',
-                    message: `Failed to process pull request #${payload.prNumber}`,
-                    metadata: {
-                        source: payload.source,
-                        replacementRecordId: payload.replacementRecordId,
-                    },
-                });
+            try {
+                const failedPr = await PullRequest.findByIdAndUpdate(
+                    processingRecordId,
+                    { $set: { processingStatus: 'error' } },
+                    { projection: { installationId: 1, repoId: 1 } },
+                );
+                if (failedPr) {
+                    await logActivity({
+                        installationId: failedPr.installationId,
+                        repoId: failedPr.repoId,
+                        pullRequestId: processingRecordId,
+                        event: QUEUE_EVENTS.PULL_REQUEST.OPENED,
+                        status: 'error',
+                        message: `Failed to process pull request #${payload.prNumber}`,
+                        metadata: {
+                            source: payload.source,
+                            replacementRecordId: payload.replacementRecordId,
+                        },
+                    });
+                }
+            } catch (logError) {
+                console.log("Error while logging activity for pull_request.opened:", logError);
             }
         }
         throw error;

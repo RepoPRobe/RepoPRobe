@@ -40,7 +40,7 @@ export async function handlePullRequestEdited(payload: PullRequestEdited) {
             { $set: fieldsToUpdate },
             { projection: { _id: 1, repoId: 1, prNumber: 1 } },
         );
-        if(!prRecord) {
+        if (!prRecord) {
             console.log(`No PR record found for installation ${payload.installationId} and PR ${payload.prId}`);
             return;
         }
@@ -76,25 +76,29 @@ export async function handlePullRequestEdited(payload: PullRequestEdited) {
         console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId}`);
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.EDITED}]:`, error);
-        const installationRecord = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (installationRecord) {
-            const prRecord = await PullRequest.findOne(
-                { installationId: installationRecord._id, githubPrId: payload.prId },
-                { _id: 1, repoId: 1, prNumber: 1 },
+        try {
+            const installationRecord = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
             );
-            if (prRecord) {
-                await logActivity({
-                    installationId: installationRecord._id,
-                    repoId: prRecord.repoId,
-                    pullRequestId: prRecord._id,
-                    event: QUEUE_EVENTS.PULL_REQUEST.EDITED,
-                    status: 'error',
-                    message: `Failed to update pull request #${prRecord.prNumber}`,
-                });
+            if (installationRecord) {
+                const prRecord = await PullRequest.findOne(
+                    { installationId: installationRecord._id, githubPrId: payload.prId },
+                    { _id: 1, repoId: 1, prNumber: 1 },
+                );
+                if (prRecord) {
+                    await logActivity({
+                        installationId: installationRecord._id,
+                        repoId: prRecord.repoId,
+                        pullRequestId: prRecord._id,
+                        event: QUEUE_EVENTS.PULL_REQUEST.EDITED,
+                        status: 'error',
+                        message: `Failed to update pull request #${prRecord.prNumber}`,
+                    });
+                }
             }
+        } catch (logError) {
+            console.log("Error while logging activity for pull_request.edited:", logError);
         }
     }
 }

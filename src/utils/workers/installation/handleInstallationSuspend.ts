@@ -28,17 +28,21 @@ export async function handleInstallationSuspend(payload: InstallationSuspend) {
         }
     } catch (error) {
         console.log("Error [installation.suspend]:", error)
-        const githubInstallation = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (githubInstallation) {
-            await logActivity({
-                installationId: githubInstallation._id,
-                event: QUEUE_EVENTS.INSTALLATION.SUSPEND,
-                status: 'error',
-                message: 'Failed to suspend GitHub App installation',
-            });
+        try {
+            const githubInstallation = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
+            );
+            if (githubInstallation) {
+                await logActivity({
+                    installationId: githubInstallation._id,
+                    event: QUEUE_EVENTS.INSTALLATION.SUSPEND,
+                    status: 'error',
+                    message: 'Failed to suspend GitHub App installation',
+                });
+            }
+        } catch (logError) {
+            console.log("Error while logging activity for installation.suspend:", logError);
         }
     }
 }

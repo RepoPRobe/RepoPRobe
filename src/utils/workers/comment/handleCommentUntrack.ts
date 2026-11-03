@@ -97,23 +97,27 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
         }
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.UNTRACK}:`, error);
-        const installationRecord = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (installationRecord) {
-            const repoRecord = await Repo.findOne(
-                { installationId: installationRecord._id, githubId: payload.repoId },
+        try {
+            const installationRecord = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
                 { _id: 1 },
             );
-            await logActivity({
-                installationId: installationRecord._id,
-                repoId: repoRecord?._id,
-                event: QUEUE_EVENTS.COMMENT.UNTRACK,
-                status: 'error',
-                message: `Failed to untrack pull request #${payload.prNumber}`,
-                metadata: { source: payload.source },
-            });
+            if (installationRecord) {
+                const repoRecord = await Repo.findOne(
+                    { installationId: installationRecord._id, githubId: payload.repoId },
+                    { _id: 1 },
+                );
+                await logActivity({
+                    installationId: installationRecord._id,
+                    repoId: repoRecord?._id,
+                    event: QUEUE_EVENTS.COMMENT.UNTRACK,
+                    status: 'error',
+                    message: `Failed to untrack pull request #${payload.prNumber}`,
+                    metadata: { source: payload.source },
+                });
+            }
+        } catch (logError) {
+            console.log("Error while logging activity for comment.untrack:", logError);
         }
     }
 }

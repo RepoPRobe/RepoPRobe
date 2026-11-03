@@ -46,25 +46,29 @@ export async function handlePullRequestReadyForReview(payload: PullRequestReadyF
         }
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW}]:`, error);
-        const installationRecord = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (installationRecord) {
-            const prRecord = await PullRequest.findOne(
-                { installationId: installationRecord._id, githubPrId: payload.prId },
-                { _id: 1, repoId: 1, prNumber: 1 },
+        try {
+            const installationRecord = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
             );
-            if (prRecord) {
-                await logActivity({
-                    installationId: installationRecord._id,
-                    repoId: prRecord.repoId,
-                    pullRequestId: prRecord._id,
-                    event: QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW,
-                    status: 'error',
-                    message: `Failed to mark pull request #${prRecord.prNumber} ready for review`,
-                });
+            if (installationRecord) {
+                const prRecord = await PullRequest.findOne(
+                    { installationId: installationRecord._id, githubPrId: payload.prId },
+                    { _id: 1, repoId: 1, prNumber: 1 },
+                );
+                if (prRecord) {
+                    await logActivity({
+                        installationId: installationRecord._id,
+                        repoId: prRecord.repoId,
+                        pullRequestId: prRecord._id,
+                        event: QUEUE_EVENTS.PULL_REQUEST.READY_FOR_REVIEW,
+                        status: 'error',
+                        message: `Failed to mark pull request #${prRecord.prNumber} ready for review`,
+                    });
+                }
             }
+        } catch (logError) {
+            console.log("Error while logging activity for pull_request.ready_for_review:", logError);
         }
     }
 }

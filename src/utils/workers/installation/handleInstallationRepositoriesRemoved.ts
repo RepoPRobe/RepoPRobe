@@ -50,17 +50,21 @@ export async function handleInstallationRepositoriesRemoved(payload: Installatio
         console.log(`Marked ${reposToDelete.length} repos as deleted for installation ${payload.installationId}`);
     } catch (error) {
         console.log("Error [installation_repositories.removed]:", error);
-        const installationDoc = await GithubInstallation.findOne(
-            { installationId: payload.installationId },
-            { _id: 1 },
-        );
-        if (installationDoc) {
-            await logActivity({
-                installationId: installationDoc._id,
-                event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED,
-                status: 'error',
-                message: 'Failed to remove repositories from installation',
-            });
+        try {
+            const installationDoc = await GithubInstallation.findOne(
+                { installationId: payload.installationId },
+                { _id: 1 },
+            );
+            if (installationDoc) {
+                await logActivity({
+                    installationId: installationDoc._id,
+                    event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED,
+                    status: 'error',
+                    message: 'Failed to remove repositories from installation',
+                });
+            }
+        } catch (logError) {
+            console.log("Error while logging activity for installation_repositories.removed:", logError);
         }
     }
 }

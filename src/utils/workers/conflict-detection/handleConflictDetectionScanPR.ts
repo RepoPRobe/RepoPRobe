@@ -278,20 +278,24 @@ export async function handleConflictDetectionScanPR(payload: ConflictDetectionSc
         console.log(`Conflict detection scan completed for PR ${payload.prId}. Total conflicts detected: ${conflicts.length} and stored in the database. Bot comment job added to notify about conflicts.`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}:`, error);
-        const prRecord = await PullRequest.findOne(
-            { _id: new Types.ObjectId(payload.prId) },
-            { installationId: 1, repoId: 1, prNumber: 1 },
-        );
-        if (prRecord) {
-            await logActivity({
-                installationId: prRecord.installationId,
-                repoId: prRecord.repoId,
-                pullRequestId: prRecord._id,
-                event: QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR,
-                status: 'error',
-                message: `Failed conflict scan for pull request #${prRecord.prNumber}`,
-                metadata: { source: payload.source },
-            });
+        try {
+            const prRecord = await PullRequest.findOne(
+                { _id: new Types.ObjectId(payload.prId) },
+                { installationId: 1, repoId: 1, prNumber: 1 },
+            );
+            if (prRecord) {
+                await logActivity({
+                    installationId: prRecord.installationId,
+                    repoId: prRecord.repoId,
+                    pullRequestId: prRecord._id,
+                    event: QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR,
+                    status: 'error',
+                    message: `Failed conflict scan for pull request #${prRecord.prNumber}`,
+                    metadata: { source: payload.source },
+                });
+            }
+        } catch (logError) {
+            console.log("Error while logging activity for conflict detection scan:", logError);
         }
     }
 }
