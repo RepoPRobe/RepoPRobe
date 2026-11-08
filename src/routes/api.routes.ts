@@ -17,6 +17,8 @@ import { conflictDetectionQueue } from '../queues/conflict-detection.queue';
 import { logActivity } from '../utils/common/activityLog';
 import { ActivityLog } from '../db/schema/ActivityLogs';
 
+const ACTIVITY_LOG_LIMIT = 100;
+
 const apiRouter = express.Router();
 
 apiRouter.use(cors());
@@ -1509,6 +1511,8 @@ apiRouter.get('/activity-logs', async (req, res) => {
         if (scope === 'installation') {
             logs = await ActivityLog.aggregate([
                 { $match: baseMatch },
+                { $sort: { createdAt: -1, _id: -1 } },
+                { $limit: ACTIVITY_LOG_LIMIT + 1 },
                 {
                     $lookup: {
                         from: 'activitylogs',
@@ -1539,7 +1543,6 @@ apiRouter.get('/activity-logs', async (req, res) => {
                         preserveNullAndEmptyArrays: true
                     }
                 },
-                { $sort: { createdAt: -1 } },
             ]);
         }
         if (scope === 'repository') {
@@ -1551,6 +1554,8 @@ apiRouter.get('/activity-logs', async (req, res) => {
                         repoId: new Types.ObjectId(repoId),
                     }
                 },
+                { $sort: { createdAt: -1, _id: -1 } },
+                { $limit: ACTIVITY_LOG_LIMIT + 1 },
                 {
                     $lookup: {
                         from: 'activitylogs',
@@ -1559,7 +1564,6 @@ apiRouter.get('/activity-logs', async (req, res) => {
                         as: 'childLogs',
                     }
                 },
-                { $sort: { createdAt: -1 } },
             ]);
         }
         if (scope === 'pullrequest') {
@@ -1572,6 +1576,8 @@ apiRouter.get('/activity-logs', async (req, res) => {
                         pullRequestId: new Types.ObjectId(prId),
                     }
                 },
+                { $sort: { createdAt: -1, _id: -1 } },
+                { $limit: ACTIVITY_LOG_LIMIT + 1 },
                 {
                     $lookup: {
                         from: 'activitylogs',
@@ -1580,14 +1586,17 @@ apiRouter.get('/activity-logs', async (req, res) => {
                         as: 'childLogs',
                     }
                 },
-                { $sort: { createdAt: -1 } },
             ]);
         }
+
+        const hasMore = logs.length > ACTIVITY_LOG_LIMIT;
+        logs = logs.slice(0, ACTIVITY_LOG_LIMIT);
 
         return res.status(200).json({
             success: true,
             scope: scope,
             logs: logs,
+            hasMore,
         });
     } catch (error) {
         console.error('Error fetching activity logs:', error);
