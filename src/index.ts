@@ -52,9 +52,6 @@ server.post("/webhook", express.raw({ type: 'application/json' }), async (req, r
  */
 
 webhooks.on("installation.created", async ({ payload }) => {
-    console.log("Installation Created");
-    console.dir(payload, { depth: null, colors: true });
-
     try {
         const account = payload.installation.account;
         const owner = account ? {
@@ -98,9 +95,6 @@ webhooks.on("installation.created", async ({ payload }) => {
 });
 
 webhooks.on("installation.deleted", async ({ payload }) => {
-    console.log("Installation Deleted");
-    console.dir(payload, { depth: null, colors: true });
-
     try {
         await installationQueue.add(QUEUE_EVENTS.INSTALLATION.DELETED, {
             installationId: payload.installation.id.toString(),
@@ -115,9 +109,6 @@ webhooks.on("installation.deleted", async ({ payload }) => {
 });
 
 webhooks.on("installation.suspend", async ({ payload }) => {
-    console.log("Installation Suspended");
-    console.dir(payload, { depth: null, colors: true });
-
     try {
         await installationQueue.add(QUEUE_EVENTS.INSTALLATION.SUSPEND, {
             installationId: payload.installation.id.toString(),
@@ -132,9 +123,6 @@ webhooks.on("installation.suspend", async ({ payload }) => {
 });
 
 webhooks.on("installation.unsuspend", async ({ payload }) => {
-    console.log("Installation Unsuspended");
-    console.dir(payload, { depth: null, colors: true });
-
     try {
         await installationQueue.add(QUEUE_EVENTS.INSTALLATION.UNSUSPEND, {
             installationId: payload.installation.id.toString(),
@@ -149,9 +137,6 @@ webhooks.on("installation.unsuspend", async ({ payload }) => {
 });
 
 webhooks.on("installation_repositories.added", async ({ payload }) => {
-    console.log("Installation Repositories Added");
-    console.dir(payload, { depth: null, colors: true });
-
     try {
         await installationQueue.add(QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED, {
             installationId: payload.installation.id.toString(),
@@ -172,9 +157,6 @@ webhooks.on("installation_repositories.added", async ({ payload }) => {
 });
 
 webhooks.on("installation_repositories.removed", async ({ payload }) => {
-    console.log("Installation Repositories Removed");
-    console.dir(payload, { depth: null, colors: true });
-
     try {
         await installationQueue.add(QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED, {
             installationId: payload.installation.id.toString(),
@@ -196,8 +178,6 @@ webhooks.on("installation_repositories.removed", async ({ payload }) => {
  * PR Related Webhooks
  */
 webhooks.on("pull_request.opened", async ({ payload }) => {
-    console.log("PR Opened");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.opened");
@@ -245,8 +225,6 @@ webhooks.on("pull_request.opened", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.closed", async ({ payload }) => {
-    console.log("PR Closed");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.closed");
@@ -270,8 +248,6 @@ webhooks.on("pull_request.closed", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.reopened", async ({ payload }) => {
-    console.log("PR Reopened");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.reopened");
@@ -294,8 +270,6 @@ webhooks.on("pull_request.reopened", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.synchronize", async ({ payload }) => {
-    console.log("PR Synchronize");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.synchronize");
@@ -322,8 +296,6 @@ webhooks.on("pull_request.synchronize", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.edited", async ({ payload }) => {
-    console.log("PR Edited");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.edited");
@@ -358,8 +330,6 @@ webhooks.on("pull_request.edited", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.converted_to_draft", async ({ payload }) => {
-    console.log("PR Converted to Draft");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.converted_to_draft");
@@ -381,8 +351,6 @@ webhooks.on("pull_request.converted_to_draft", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.ready_for_review", async ({ payload }) => {
-    console.log("PR Ready for Review");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.ready_for_review");
@@ -404,8 +372,6 @@ webhooks.on("pull_request.ready_for_review", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.labeled", async ({ payload }) => {
-    console.log("PR Labeled");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.labeled");
@@ -436,8 +402,6 @@ webhooks.on("pull_request.labeled", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.unlabeled", async ({ payload }) => {
-    console.log("PR Unlabeled");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.unlabeled");
@@ -468,8 +432,6 @@ webhooks.on("pull_request.unlabeled", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.assigned", async ({ payload }) => {
-    console.log("PR Assigned");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.assigned");
@@ -502,8 +464,6 @@ webhooks.on("pull_request.assigned", async ({ payload }) => {
 });
 
 webhooks.on("pull_request.unassigned", async ({ payload }) => {
-    console.log("PR Unassigned");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (!payload.installation) {
             console.log("No installation found in payload for pull_request.assigned");
@@ -541,8 +501,6 @@ webhooks.on("pull_request.unassigned", async ({ payload }) => {
  */
 
 webhooks.on("issue_comment.created", async ({ payload }) => {
-    console.log("Issue Comment Created");
-    console.dir(payload, { depth: null, colors: true });
     try {
         if (payload.comment.user?.id === Number(process.env.REPOPROBE_BOT_GITHUB_ID)) { // ignore self comment
             return;

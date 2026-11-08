@@ -7,15 +7,17 @@ import { isValidObjectId, Types } from 'mongoose';
 import { Octokit } from 'octokit';
 import { GithubInstallation } from '../db/schema/GithubInstallation';
 import { Repo } from '../db/schema/Repo';
-import { PullRequest, PullRequestType } from '../db/schema/PullRequest';
+import { PullRequest } from '../db/schema/PullRequest';
 import { Conflict } from '../db/schema/Conflict';
 import { commentQueue } from '../queues/comment.queue';
 import { QUEUE_EVENTS } from '../types/queue-events';
 import { CommentTrack, CommentUntrack, ConflictDetectionScanPR, PullRequestOpened } from '../types/queue-payloads';
 import { pullRequestQueue } from '../queues/pull-request.queue';
 import { conflictDetectionQueue } from '../queues/conflict-detection.queue';
-import { PullRequestFile, PullRequestFileType } from '../db/schema/PullRequestFile';
 import { logActivity } from '../utils/common/activityLog';
+import { ActivityLog } from '../db/schema/ActivityLogs';
+
+const ACTIVITY_LOG_LIMIT = 100;
 
 const apiRouter = express.Router();
 
@@ -470,6 +472,13 @@ apiRouter.get('/get-repository', async (req, res) => {
 
 apiRouter.post('/pullrequest/track', async (req, res) => {
     try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
         const { prNumber, repositoryId, installationId } = req.body;
 
         if (!isValidObjectId(repositoryId) || !isValidObjectId(installationId)) {
@@ -499,7 +508,7 @@ apiRouter.post('/pullrequest/track', async (req, res) => {
         }
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
 
-        const octokit = new Octokit({ auth: req.user?.accessToken });
+        const octokit = new Octokit({ auth: req.user.accessToken });
         const { data: repo } = await octokit.rest.repos.get({
             owner: repoOwner,
             repo: repoName,
@@ -540,6 +549,14 @@ apiRouter.post('/pullrequest/track', async (req, res) => {
 
 apiRouter.post('/pullrequest/untrack', async (req, res) => {
     try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
+
         const { prNumber, repositoryId, installationId } = req.body;
 
         if (!isValidObjectId(repositoryId) || !isValidObjectId(installationId)) {
@@ -569,7 +586,7 @@ apiRouter.post('/pullrequest/untrack', async (req, res) => {
         }
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
 
-        const octokit = new Octokit({ auth: req.user?.accessToken });
+        const octokit = new Octokit({ auth: req.user.accessToken });
         const { data: repo } = await octokit.rest.repos.get({
             owner: repoOwner,
             repo: repoName,
@@ -609,6 +626,14 @@ apiRouter.post('/pullrequest/untrack', async (req, res) => {
 
 apiRouter.post('/pullrequest/sync', async (req, res) => {
     try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
+
         const { prNumber, repositoryId, installationId } = req.body;
 
         if (!isValidObjectId(repositoryId) || !isValidObjectId(installationId)) {
@@ -652,7 +677,7 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
             });
         }
 
-        const octokit = new Octokit({ auth: req.user?.accessToken });
+        const octokit = new Octokit({ auth: req.user.accessToken });
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
 
         const [{ data: repo }, { data: pullRequest }] = await Promise.all([
@@ -842,6 +867,14 @@ apiRouter.post('/pullrequest/sync', async (req, res) => {
 
 apiRouter.post('/pullrequest/scan-conflicts', async (req, res) => {
     try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
+
         const { prNumber, repositoryId, installationId } = req.body;
 
         if (!isValidObjectId(repositoryId) || !isValidObjectId(installationId)) {
@@ -877,7 +910,7 @@ apiRouter.post('/pullrequest/scan-conflicts', async (req, res) => {
         }
 
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
-        const octokit = new Octokit({ auth: req.user?.accessToken });
+        const octokit = new Octokit({ auth: req.user.accessToken });
         try {
             const { data: repo } = await octokit.rest.repos.get({ owner: repoOwner, repo: repoName });
             if (!repo.permissions?.push) {
@@ -929,6 +962,14 @@ apiRouter.post('/pullrequest/scan-conflicts', async (req, res) => {
 
 apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
     try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
+
         const { prNumber, repositoryId, installationId } = req.body;
 
         if (!isValidObjectId(repositoryId) || !isValidObjectId(installationId)) {
@@ -973,7 +1014,7 @@ apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
             });
         }
 
-        const octokit = new Octokit({ auth: req.user?.accessToken });
+        const octokit = new Octokit({ auth: req.user.accessToken });
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
 
         const [repoResponse, prResponse] = await Promise.allSettled([
@@ -1039,6 +1080,14 @@ apiRouter.post('/pullrequest/retry-processing', async (req, res) => {
 
 apiRouter.get('/pullrequest/conflicts', async (req, res) => {
     try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
+
         const { prNumber, repositoryId, installationId } = req.query;
 
         if (
@@ -1084,7 +1133,7 @@ apiRouter.get('/pullrequest/conflicts', async (req, res) => {
 
         const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
         try {
-            const octokit = new Octokit({ auth: req.user?.accessToken });
+            const octokit = new Octokit({ auth: req.user.accessToken });
             await octokit.rest.repos.get({ owner: repoOwner, repo: repoName });
         } catch (error) {
             console.error('Unable to access repository for conflict lookup:', error);
@@ -1342,6 +1391,225 @@ apiRouter.get('/pullrequest/conflicts', async (req, res) => {
         return res.status(500).json({
             success: false,
             message: 'Error fetching pull request conflicts',
+        });
+    }
+});
+
+apiRouter.get('/activity-logs', async (req, res) => {
+    try {
+        if (!req.user) {
+            console.error('User not authenticated');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated',
+            });
+        }
+
+        const { installationId, repoId, prId } = req.query;
+
+        if (!installationId || typeof installationId !== 'string' || !isValidObjectId(installationId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Installation ID.',
+            });
+        }
+        if (repoId && (typeof repoId !== 'string' || !isValidObjectId(repoId))) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Repository ID.',
+            });
+        }
+        if (prId && (typeof prId !== 'string' || !isValidObjectId(prId))) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Pull Request ID.',
+            });
+        }
+        if (prId && !repoId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Pull Request ID provided without a Repository ID.',
+            });
+        }
+
+        let scope: 'installation' | 'repository' | 'pullrequest' = prId ? 'pullrequest' : repoId ? 'repository' : 'installation';
+        const octokit = new Octokit({ auth: req.user.accessToken });
+
+        const installationRecord = await GithubInstallation.findById(installationId, { installationId: 1, _id: 1 });
+        if (!installationRecord) {
+            console.error('Installation not found for ID:', installationId);
+            return res.status(404).json({
+                success: false,
+                message: 'Invalid Installation ID.',
+            });
+        }
+
+        const allowedInstallations = await octokit.paginate(
+            octokit.rest.apps.listInstallationsForAuthenticatedUser,
+            { per_page: 100 },
+            (response, done) => {
+                if (response.data.some(installation => installation.id === Number(installationRecord.installationId))) {
+                    done();
+                }
+                return response.data;
+            },
+        );
+        const isValidInstallation = allowedInstallations.find(
+            allowedInstallation => allowedInstallation.id === Number(installationRecord.installationId)
+        );
+        if (!isValidInstallation) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have access to this installation.',
+            });
+        }
+
+        const allowedRepositories = await octokit.paginate(
+            octokit.rest.apps.listInstallationReposForAuthenticatedUser,
+            {
+                installation_id: Number(installationRecord.installationId),
+                per_page: 100,
+            }
+        );
+        if (allowedRepositories.length === 0) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have access to any repositories in this installation.',
+            });
+        }
+
+        let allowedRepositoryGithubIds = allowedRepositories.map(ar => ar.id);
+        const allowedRepositoriesDbIds = await Repo.find(
+            {
+                installationId: installationRecord._id,
+                githubId: { $in: allowedRepositoryGithubIds.map(String) },
+            },
+            { _id: 1 },
+        ).distinct('_id');
+
+        // Scope check: for repository, pullrequest
+        if (scope !== 'installation') {
+            const repoRecord = await Repo.findOne(
+                {
+                    installationId: installationRecord._id,
+                    _id: new Types.ObjectId(repoId),
+                },
+                { _id: 1 },
+            );
+            if (!repoRecord || !allowedRepositoriesDbIds.find(ar => ar.toString() === repoId)) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Repository not found.',
+                });
+            }
+        }
+
+        const baseMatch = {
+            parentLogId: { $exists: false },
+            installationId: installationRecord._id,
+            $or: [
+                { repoId: { $exists: false } },
+                { repoId: { $in: allowedRepositoriesDbIds } },
+            ]
+        };
+        let logs: any[] = []
+
+        if (scope === 'installation') {
+            logs = await ActivityLog.aggregate([
+                { $match: baseMatch },
+                { $sort: { createdAt: -1, _id: -1 } },
+                { $limit: ACTIVITY_LOG_LIMIT + 1 },
+                {
+                    $lookup: {
+                        from: 'activitylogs',
+                        localField: '_id',
+                        foreignField: 'parentLogId',
+                        pipeline: [{ $match: { $or: baseMatch.$or } }],
+                        as: 'childLogs',
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'repos',
+                        localField: 'repoId',
+                        foreignField: '_id',
+                        as: 'repoId',
+                        pipeline: [
+                            {
+                                $project: {
+                                    _id: 1,
+                                    githubFullName: 1
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    $unwind: {
+                        path: '$repoId',
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+            ]);
+        }
+        if (scope === 'repository') {
+            const { $or, ...restMatch } = baseMatch;
+            logs = await ActivityLog.aggregate([
+                {
+                    $match: {
+                        ...restMatch,
+                        repoId: new Types.ObjectId(repoId),
+                    }
+                },
+                { $sort: { createdAt: -1, _id: -1 } },
+                { $limit: ACTIVITY_LOG_LIMIT + 1 },
+                {
+                    $lookup: {
+                        from: 'activitylogs',
+                        localField: '_id',
+                        foreignField: 'parentLogId',
+                        as: 'childLogs',
+                    }
+                },
+            ]);
+        }
+        if (scope === 'pullrequest') {
+            const { $or, ...restMatch } = baseMatch;
+            logs = await ActivityLog.aggregate([
+                {
+                    $match: {
+                        ...restMatch,
+                        repoId: new Types.ObjectId(repoId),
+                        pullRequestId: new Types.ObjectId(prId),
+                    }
+                },
+                { $sort: { createdAt: -1, _id: -1 } },
+                { $limit: ACTIVITY_LOG_LIMIT + 1 },
+                {
+                    $lookup: {
+                        from: 'activitylogs',
+                        localField: '_id',
+                        foreignField: 'parentLogId',
+                        as: 'childLogs',
+                    }
+                },
+            ]);
+        }
+
+        const hasMore = logs.length > ACTIVITY_LOG_LIMIT;
+        logs = logs.slice(0, ACTIVITY_LOG_LIMIT);
+
+        return res.status(200).json({
+            success: true,
+            scope: scope,
+            logs: logs,
+            hasMore,
+        });
+    } catch (error) {
+        console.error('Error fetching activity logs:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching activity logs'
         });
     }
 });

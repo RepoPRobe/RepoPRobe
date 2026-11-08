@@ -101,14 +101,18 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
         }
 
         const octokit = await githubApp.getInstallationOctokit(parseInt(payload.installationId));
-        const prFiles = await octokit.rest.pulls.listFiles({
-            owner: payload.repoOwnerLogin,
-            repo: payload.repoName,
-            pull_number: payload.prNumber,
-        });
+        const prFiles = await octokit.paginate(
+            octokit.rest.pulls.listFiles,
+            {
+                owner: payload.repoOwnerLogin,
+                repo: payload.repoName,
+                pull_number: payload.prNumber,
+                per_page: 100,
+            }
+        );
 
-        if (prFiles.status === 200) {
-            const convertedPatchObject = processPullRequestFiles(prFiles.data);
+        if (prFiles.length > 0) {
+            const convertedPatchObject = processPullRequestFiles(prFiles);
 
             await PullRequestFile.insertMany(
                 convertedPatchObject.map(patchObj => ({
