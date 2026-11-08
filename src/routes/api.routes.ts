@@ -1447,6 +1447,12 @@ apiRouter.get('/activity-logs', async (req, res) => {
         const allowedInstallations = await octokit.paginate(
             octokit.rest.apps.listInstallationsForAuthenticatedUser,
             { per_page: 100 },
+            (response, done) => {
+                if (response.data.some(installation => installation.id === Number(installationRecord.installationId))) {
+                    done();
+                }
+                return response.data;
+            },
         );
         const isValidInstallation = allowedInstallations.find(
             allowedInstallation => allowedInstallation.id === Number(installationRecord.installationId)
@@ -1518,6 +1524,7 @@ apiRouter.get('/activity-logs', async (req, res) => {
                         from: 'activitylogs',
                         localField: '_id',
                         foreignField: 'parentLogId',
+                        pipeline: [{ $match: { $or: baseMatch.$or } }],
                         as: 'childLogs',
                     }
                 },
