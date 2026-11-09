@@ -1,13 +1,13 @@
 import { Worker } from 'bullmq';
-import { redisConnection } from '../utils/queue/connection';
-import { QUEUE_EVENTS } from '../types/queue-events';
-import { handleCommentHelp, handleCommentInvalidCommand } from '../utils/workers/comment/handleCommentHelp';
-import { handleCommentTrack } from '../utils/workers/comment/handleCommentTrack';
-import { handleCommentUntrack } from '../utils/workers/comment/handleCommentUntrack';
-import { handleCommentCheck } from '../utils/workers/comment/handleCommentCheck';
-import { handleBotCommentConflictsFound } from '../utils/workers/comment/handleBotCommentConflictsFound';
-import handleBotCommentCustom from '../utils/workers/comment/handleBotCommentCustom';
-import { handleCommentStatus } from '../utils/workers/comment/handleCommentStatus';
+import { redisConnection } from '../utils/queue/connection.js';
+import { QUEUE_EVENTS } from '../types/queue-events.js';
+import { handleCommentHelp, handleCommentInvalidCommand } from '../utils/workers/comment/handleCommentHelp.js';
+import { handleCommentTrack } from '../utils/workers/comment/handleCommentTrack.js';
+import { handleCommentUntrack } from '../utils/workers/comment/handleCommentUntrack.js';
+import { handleCommentCheck } from '../utils/workers/comment/handleCommentCheck.js';
+import { handleBotCommentConflictsFound } from '../utils/workers/comment/handleBotCommentConflictsFound.js';
+import handleBotCommentCustom from '../utils/workers/comment/handleBotCommentCustom.js';
+import { handleCommentStatus } from '../utils/workers/comment/handleCommentStatus.js';
 
 export const commentWorker = new Worker('comment', async (commentPayload) => {
     console.log(`Processing comment ${commentPayload.name}`, commentPayload.id);

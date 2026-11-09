@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
-import { redisConnection } from "../utils/queue/connection";
-import { QUEUE_EVENTS } from "../types/queue-events";
-import { handleConflictDetectionScanPR } from "../utils/workers/conflict-detection/handleConflictDetectionScanPR";
+import { redisConnection } from "../utils/queue/connection.js";
+import { QUEUE_EVENTS } from "../types/queue-events.js";
+import { handleConflictDetectionScanPR } from "../utils/workers/conflict-detection/handleConflictDetectionScanPR.js";
 
 export const conflictDetectionWorker = new Worker('conflict-detection', async (payload) => {
     console.log(`Processing conflict detection ${payload.name}`, payload.id);

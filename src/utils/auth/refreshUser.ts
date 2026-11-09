@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
-import { User } from '../../db/schema/User';
-import { refreshGithubToken } from '../api/refreshAccessToken';
-import { decryptToken } from './tokenEncryption';
+import { User } from '../../db/schema/User.js';
+import { refreshGithubToken } from '../api/refreshAccessToken.js';
+import { decryptToken } from './tokenEncryption.js';
 
 export function userCredentials(user: { accessToken: string; refreshToken: string; accessTokenExpiry: number; refreshTokenExpiry: number }) {
     return {

@@ -1,27 +1,43 @@
 import express from 'express';
-import { User } from '../db/schema/User';
+import { User } from '../db/schema/User.js';
 import jwt from "jsonwebtoken";
 import cors from 'cors';
-import { refreshUser, userCredentials } from '../utils/auth/refreshUser';
+import { refreshUser, userCredentials } from '../utils/auth/refreshUser.js';
 import { isValidObjectId, Types } from 'mongoose';
 import { Octokit } from 'octokit';
-import { GithubInstallation } from '../db/schema/GithubInstallation';
-import { Repo } from '../db/schema/Repo';
-import { PullRequest } from '../db/schema/PullRequest';
-import { Conflict } from '../db/schema/Conflict';
-import { commentQueue } from '../queues/comment.queue';
-import { QUEUE_EVENTS } from '../types/queue-events';
-import { CommentTrack, CommentUntrack, ConflictDetectionScanPR, PullRequestOpened } from '../types/queue-payloads';
-import { pullRequestQueue } from '../queues/pull-request.queue';
-import { conflictDetectionQueue } from '../queues/conflict-detection.queue';
-import { logActivity } from '../utils/common/activityLog';
-import { ActivityLog } from '../db/schema/ActivityLogs';
+import { GithubInstallation } from '../db/schema/GithubInstallation.js';
+import { Repo } from '../db/schema/Repo.js';
+import { PullRequest } from '../db/schema/PullRequest.js';
+import { Conflict } from '../db/schema/Conflict.js';
+import { commentQueue } from '../queues/comment.queue.js';
+import { QUEUE_EVENTS } from '../types/queue-events.js';
+import { CommentTrack, CommentUntrack, ConflictDetectionScanPR, PullRequestOpened } from '../types/queue-payloads.js';
+import { pullRequestQueue } from '../queues/pull-request.queue.js';
+import { conflictDetectionQueue } from '../queues/conflict-detection.queue.js';
+import { logActivity } from '../utils/common/activityLog.js';
+import { ActivityLog } from '../db/schema/ActivityLogs.js';
 
 const ACTIVITY_LOG_LIMIT = 100;
+const frontendUrlValue = process.env.FRONTEND_URL?.trim();
+
+if (!frontendUrlValue || frontendUrlValue === '*') {
+    throw new Error('FRONTEND_URL must be set to a valid frontend URL');
+}
+
+let frontendOrigin: string;
+try {
+    const frontendUrl = new URL(frontendUrlValue);
+    if (!['http:', 'https:'].includes(frontendUrl.protocol) || !frontendUrl.hostname) {
+        throw new Error('unsupported URL origin');
+    }
+    frontendOrigin = frontendUrl.origin;
+} catch {
+    throw new Error('FRONTEND_URL must be a valid HTTP or HTTPS URL');
+}
 
 const apiRouter = express.Router();
 
-apiRouter.use(cors());
+apiRouter.use(cors({ origin: frontendOrigin, credentials: true }));
 apiRouter.use(express.json());
 
 apiRouter.get('/health', (_req, res) => {

@@ -1,14 +1,14 @@
 import 'dotenv/config';
-import { connectDB, closeDB } from "./db";
-import { commentWorker } from "./workers/comment.worker";
-import { conflictDetectionWorker } from "./workers/conflict-detection.worker";
-import { installationWorker } from "./workers/installation.worker";
-import { pullRequestWorker } from "./workers/pull-request.worker";
-import { redisConnection } from './utils/queue/connection';
-import { installationQueue } from './queues/installation.queue';
-import { pullRequestQueue } from './queues/pull-request.queue';
-import { commentQueue } from './queues/comment.queue';
-import { conflictDetectionQueue } from './queues/conflict-detection.queue';
+import { connectDB, closeDB } from "./db/index.js";
+import { commentWorker } from "./workers/comment.worker.js";
+import { conflictDetectionWorker } from "./workers/conflict-detection.worker.js";
+import { installationWorker } from "./workers/installation.worker.js";
+import { pullRequestWorker } from "./workers/pull-request.worker.js";
+import { redisConnection } from './utils/queue/connection.js';
+import { installationQueue } from './queues/installation.queue.js';
+import { pullRequestQueue } from './queues/pull-request.queue.js';
+import { commentQueue } from './queues/comment.queue.js';
+import { conflictDetectionQueue } from './queues/conflict-detection.queue.js';
 
 async function main() {
     console.log("Connecting to the database...");

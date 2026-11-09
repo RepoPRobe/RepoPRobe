@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { redisConnection } from "../utils/queue/connection";
+import { redisConnection } from "../utils/queue/connection.js";
 
 export const installationQueue = new Queue('installation', {
     connection: redisConnection,

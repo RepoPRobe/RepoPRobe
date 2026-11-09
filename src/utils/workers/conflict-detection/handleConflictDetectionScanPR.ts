@@ -1,12 +1,12 @@
 import { Types } from "mongoose";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { PullRequestFile, PullRequestFileType, HunkType } from "../../../db/schema/PullRequestFile";
-import { areOverlapingHunks, getConflictingLinesFromHunks } from "../../../github/utils/file-patch";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { BotCommentConflictsFound, BotCommentCustom, ConflictDetectionScanPR } from "../../../types/queue-payloads";
-import { Conflict } from "../../../db/schema/Conflict";
-import { commentQueue } from "../../../queues/comment.queue";
-import { logActivity } from "../../common/activityLog";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { PullRequestFile, PullRequestFileType, HunkType } from "../../../db/schema/PullRequestFile.js";
+import { areOverlapingHunks, getConflictingLinesFromHunks } from "../../../github/utils/file-patch.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { BotCommentConflictsFound, BotCommentCustom, ConflictDetectionScanPR } from "../../../types/queue-payloads.js";
+import { Conflict } from "../../../db/schema/Conflict.js";
+import { commentQueue } from "../../../queues/comment.queue.js";
+import { logActivity } from "../../common/activityLog.js";
 
 type ConflictingDataFromHunk = {
     file: string;

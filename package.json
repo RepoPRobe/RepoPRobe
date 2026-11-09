@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "queue:all": "tsx src/worker.ts"
+    "queue:all": "tsx src/worker.ts",
+    "queue:start": "node dist/worker.js"
   },
   "type": "module",
   "keywords": [],
@@ -19,6 +22,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-basic-auth": "^1.2.1",
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.1",

@@ -1,4 +1,4 @@
-import { HunkType } from "../../db/schema/PullRequestFile";
+import { HunkType } from "../../db/schema/PullRequestFile.js";
 
 type Line = {
     type: 'context';

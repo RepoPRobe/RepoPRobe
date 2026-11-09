@@ -1,5 +1,5 @@
 import { Schema, model, Types } from "mongoose";
-import { Hunk, HunkType } from "./PullRequestFile";
+import { Hunk, HunkType } from "./PullRequestFile.js";
 
 export interface ConflictType {
 	_id: Types.ObjectId;

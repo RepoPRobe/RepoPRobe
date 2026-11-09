@@ -1,5 +1,5 @@
 import { Schema, model, Types } from 'mongoose';
-import { UserSchema, UserType } from '../common';
+import { UserSchema, UserType } from '../common/index.js';
 
 export interface PullRequestLabelType {
     id: number;

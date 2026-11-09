@@ -1,6 +1,6 @@
 import { Document, model, Schema } from "mongoose";
 
-import { encryptToken } from "../../utils/auth/tokenEncryption";
+import { encryptToken } from "../../utils/auth/tokenEncryption.js";
 
 export interface IUser extends Document {
   githubUserId: string;

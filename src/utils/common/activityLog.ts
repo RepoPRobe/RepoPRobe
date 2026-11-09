@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { ActivityLog } from '../../db/schema/ActivityLogs';
+import { ActivityLog } from '../../db/schema/ActivityLogs.js';
 
 type ActivityStatus = 'info' | 'success' | 'warning' | 'error';
 

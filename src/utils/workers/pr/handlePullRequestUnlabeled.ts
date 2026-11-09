@@ -1,7 +1,7 @@
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { PullRequestUnlabeled } from "../../../types/queue-payloads";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { PullRequestUnlabeled } from "../../../types/queue-payloads.js";
 
 export async function handlePullRequestUnlabeled(payload: PullRequestUnlabeled) {
     try {

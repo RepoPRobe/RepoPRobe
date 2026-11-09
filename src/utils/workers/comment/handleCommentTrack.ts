@@ -1,12 +1,12 @@
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { Repo } from "../../../db/schema/Repo";
-import { githubApp } from "../../../github/client";
-import { pullRequestQueue } from "../../../queues/pull-request.queue";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { CommentTrack, PullRequestOpened } from "../../../types/queue-payloads";
-import { addCommentReaction, postComment } from "../../common/comment";
-import { logActivity } from "../../common/activityLog";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { Repo } from "../../../db/schema/Repo.js";
+import { githubApp } from "../../../github/client.js";
+import { pullRequestQueue } from "../../../queues/pull-request.queue.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { CommentTrack, PullRequestOpened } from "../../../types/queue-payloads.js";
+import { addCommentReaction, postComment } from "../../common/comment.js";
+import { logActivity } from "../../common/activityLog.js";
 
 export async function handleCommentTrack(payload: CommentTrack) {
     try {

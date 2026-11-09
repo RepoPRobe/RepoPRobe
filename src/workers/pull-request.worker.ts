@@ -1,17 +1,17 @@
 import { Worker } from "bullmq";
-import { redisConnection } from "../utils/queue/connection";
-import { QUEUE_EVENTS } from "../types/queue-events";
-import { handlePullRequestOpened } from "../utils/workers/pr/handlePullRequestOpened";
-import { handlePullRequestClosed } from "../utils/workers/pr/handlePullRequestClosed";
-import { handlePullRequestReopened } from "../utils/workers/pr/handlePullRequestReopened";
-import { handlePullRequestEdited } from "../utils/workers/pr/handlePullRequestEdited";
-import { handlePullRequestConvertedToDraft } from "../utils/workers/pr/handlePullRequestConvertedToDraft";
-import { handlePullRequestReadyForReview } from "../utils/workers/pr/handlePullRequestReadyForReview";
-import { handlePullRequestLabeled } from "../utils/workers/pr/handlePullRequestLabeled";
-import { handlePullRequestUnlabeled } from "../utils/workers/pr/handlePullRequestUnlabeled";
-import { handlePullRequestAssigned } from "../utils/workers/pr/handlePullRequestAssigned";
-import { handlePullRequestUnassigned } from "../utils/workers/pr/handlePullRequestUnassigned";
-import { handlePullRequestSynchronize } from "../utils/workers/pr/handlePullRequestSynchronize";
+import { redisConnection } from "../utils/queue/connection.js";
+import { QUEUE_EVENTS } from "../types/queue-events.js";
+import { handlePullRequestOpened } from "../utils/workers/pr/handlePullRequestOpened.js";
+import { handlePullRequestClosed } from "../utils/workers/pr/handlePullRequestClosed.js";
+import { handlePullRequestReopened } from "../utils/workers/pr/handlePullRequestReopened.js";
+import { handlePullRequestEdited } from "../utils/workers/pr/handlePullRequestEdited.js";
+import { handlePullRequestConvertedToDraft } from "../utils/workers/pr/handlePullRequestConvertedToDraft.js";
+import { handlePullRequestReadyForReview } from "../utils/workers/pr/handlePullRequestReadyForReview.js";
+import { handlePullRequestLabeled } from "../utils/workers/pr/handlePullRequestLabeled.js";
+import { handlePullRequestUnlabeled } from "../utils/workers/pr/handlePullRequestUnlabeled.js";
+import { handlePullRequestAssigned } from "../utils/workers/pr/handlePullRequestAssigned.js";
+import { handlePullRequestUnassigned } from "../utils/workers/pr/handlePullRequestUnassigned.js";
+import { handlePullRequestSynchronize } from "../utils/workers/pr/handlePullRequestSynchronize.js";
 
 export const pullRequestWorker = new Worker('pull-request', async (prPayload) => {
     console.log(`Processing job ${prPayload.name}`, prPayload.id);
