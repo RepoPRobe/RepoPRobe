@@ -18,12 +18,18 @@ import basicAuth from 'express-basic-auth';
 
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
 const PORT = process.env.PORT;
+const bullBoardUsername = process.env.BULL_BOARD_USERNAME;
+const bullBoardPassword = process.env.BULL_BOARD_PASSWORD;
+const HTTP_DRAIN_TIMEOUT_MS = 10_000;
 
 if (!PORT) {
     throw new Error("PORT env not set !!");
 }
 if (!githubWebhookSecret) {
     throw new Error("GITHUB_WEBHOOK_SECRET env not set !!");
+}
+if (!bullBoardUsername?.trim() || !bullBoardPassword?.trim()) {
+    throw new Error("BULL_BOARD_USERNAME and BULL_BOARD_PASSWORD must be set and non-empty !!");
 }
 
 const server = express();
@@ -32,7 +38,7 @@ const webhooks = new Webhooks({ secret: githubWebhookSecret });
 // bull-board endpoint
 const bullBoardAuth = basicAuth({
     users: {
-        [process.env.BULL_BOARD_USERNAME!]: process.env.BULL_BOARD_PASSWORD!,
+        [bullBoardUsername]: bullBoardPassword,
     },
     challenge: true,
 });
@@ -659,7 +665,22 @@ process.on('unhandledRejection', (reason, promise) => {
 async function main() {
     await connectDB();
     if (shutdownRequested) return;
-    httpServer = server.listen(PORT, () => console.log(`Listening to port ${PORT}`));
+    const listeningServer = server.listen(PORT);
+    httpServer = listeningServer;
+    await new Promise<void>((resolve, reject) => {
+        const onListening = () => {
+            listeningServer.off('error', onError);
+            console.log(`Listening to port ${PORT}`);
+            resolve();
+        };
+        const onError = (error: Error) => {
+            listeningServer.off('listening', onListening);
+            reject(error);
+        };
+
+        listeningServer.once('listening', onListening);
+        listeningServer.once('error', onError);
+    });
 }
 
 let httpServer: Server | undefined;
@@ -686,7 +707,21 @@ const gracefulShutdown = (signal: string): Promise<void> => {
         if (serverToClose) {
             try {
                 await new Promise<void>((resolve, reject) => {
-                    serverToClose.close((error) => error ? reject(error) : resolve());
+                    let settled = false;
+                    const finish = (error?: Error) => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(drainTimeout);
+                        if (error) reject(error);
+                        else resolve();
+                    };
+                    const drainTimeout = setTimeout(() => {
+                        console.warn(`HTTP drain exceeded ${HTTP_DRAIN_TIMEOUT_MS}ms; closing remaining connections.`);
+                        serverToClose.closeAllConnections();
+                        finish();
+                    }, HTTP_DRAIN_TIMEOUT_MS);
+
+                    serverToClose.close((error) => finish(error));
                     serverToClose.closeIdleConnections();
                 });
                 console.log('HTTP server closed.');

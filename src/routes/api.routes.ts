@@ -18,15 +18,26 @@ import { logActivity } from '../utils/common/activityLog.js';
 import { ActivityLog } from '../db/schema/ActivityLogs.js';
 
 const ACTIVITY_LOG_LIMIT = 100;
-const frontendUrl = process.env.FRONTEND_URL;
+const frontendUrlValue = process.env.FRONTEND_URL?.trim();
 
-if (!frontendUrl || frontendUrl === '*') {
-    throw new Error('FRONTEND_URL must be set to the frontend origin');
+if (!frontendUrlValue || frontendUrlValue === '*') {
+    throw new Error('FRONTEND_URL must be set to a valid frontend URL');
+}
+
+let frontendOrigin: string;
+try {
+    const frontendUrl = new URL(frontendUrlValue);
+    if (!['http:', 'https:'].includes(frontendUrl.protocol) || !frontendUrl.hostname) {
+        throw new Error('unsupported URL origin');
+    }
+    frontendOrigin = frontendUrl.origin;
+} catch {
+    throw new Error('FRONTEND_URL must be a valid HTTP or HTTPS URL');
 }
 
 const apiRouter = express.Router();
 
-apiRouter.use(cors({ origin: frontendUrl, credentials: true }));
+apiRouter.use(cors({ origin: frontendOrigin, credentials: true }));
 apiRouter.use(express.json());
 
 apiRouter.get('/health', (_req, res) => {
