@@ -1,10 +1,10 @@
 import { Types } from "mongoose";
-import { Conflict, ConflictType } from "../../../db/schema/Conflict";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { BotCommentConflictsFound } from "../../../types/queue-payloads";
-import { postComment } from "../../common/comment";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { getConflictDetectionMarkdown } from "../../helpers";
+import { Conflict, ConflictType } from "../../../db/schema/Conflict.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { BotCommentConflictsFound } from "../../../types/queue-payloads.js";
+import { postComment } from "../../common/comment.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { getConflictDetectionMarkdown } from "../../helpers/index.js";
 
 export async function handleBotCommentConflictsFound(payload: BotCommentConflictsFound) {
     try {

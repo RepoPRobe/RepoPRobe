@@ -1,9 +1,9 @@
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { ConflictDetectionScanPR, PullRequestEdited } from "../../../types/queue-payloads";
-import { logActivity } from "../../common/activityLog";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { ConflictDetectionScanPR, PullRequestEdited } from "../../../types/queue-payloads.js";
+import { logActivity } from "../../common/activityLog.js";
 
 export async function handlePullRequestEdited(payload: PullRequestEdited) {
     try {

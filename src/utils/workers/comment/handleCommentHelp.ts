@@ -1,6 +1,6 @@
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { CommentHelp, CommentInvalidCommand } from "../../../types/queue-payloads";
-import { postComment } from "../../common/comment";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { CommentHelp, CommentInvalidCommand } from "../../../types/queue-payloads.js";
+import { postComment } from "../../common/comment.js";
 
 const HELP_COMMENT = `
 ## 📋 RepoProbe Commands

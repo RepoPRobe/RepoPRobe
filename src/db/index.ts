@@ -24,6 +24,7 @@ const closeDB = async () => {
         console.log('DB disconnected')
     } catch (error) {
         console.error('DB disconnection error:', error)
+        throw error;
     }
 }
 

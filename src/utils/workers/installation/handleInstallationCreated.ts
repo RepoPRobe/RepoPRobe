@@ -1,10 +1,10 @@
 import { Types } from "mongoose";
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { InstallationCreated } from "../../../types/queue-payloads";
-import { Repo } from "../../../db/schema/Repo";
-import { RepoConfig } from "../../../db/schema/RepoConfig";
-import { logActivity, LogActivityInput } from "../../common/activityLog";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { InstallationCreated } from "../../../types/queue-payloads.js";
+import { Repo } from "../../../db/schema/Repo.js";
+import { RepoConfig } from "../../../db/schema/RepoConfig.js";
+import { logActivity, LogActivityInput } from "../../common/activityLog.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
 
 export async function handleInstallationCreated(payload: InstallationCreated) {
     let installationDocId: Types.ObjectId | undefined;

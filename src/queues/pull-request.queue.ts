@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { redisConnection } from "../utils/queue/connection";
+import { redisConnection } from "../utils/queue/connection.js";
 
 export const pullRequestQueue = new Queue('pull-request', {
     connection: redisConnection,

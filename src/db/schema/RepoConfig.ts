@@ -1,5 +1,5 @@
 import { model, Schema, Types } from "mongoose";
-import { AllowedAuthorAssociations } from "../../utils/common";
+import { AllowedAuthorAssociations } from "../../utils/common/index.js";
 
 export interface InactivityThresholdType {
     value: number;

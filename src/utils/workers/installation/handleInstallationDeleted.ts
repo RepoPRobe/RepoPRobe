@@ -1,8 +1,8 @@
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { Repo } from "../../../db/schema/Repo";
-import { InstallationDeleted } from "../../../types/queue-payloads";
-import { logActivity } from "../../common/activityLog";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { Repo } from "../../../db/schema/Repo.js";
+import { InstallationDeleted } from "../../../types/queue-payloads.js";
+import { logActivity } from "../../common/activityLog.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
 
 export async function handleInstallationDeleted(payload: InstallationDeleted) {
     try {

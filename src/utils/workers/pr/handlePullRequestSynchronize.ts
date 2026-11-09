@@ -1,13 +1,13 @@
 import { console } from "inspector/promises";
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { githubApp } from "../../../github/client";
-import { processPullRequestFiles } from "../../../github/utils/file-patch";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { ConflictDetectionScanPR, PullRequestSynchronize } from "../../../types/queue-payloads";
-import { PullRequestFile } from "../../../db/schema/PullRequestFile";
-import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue";
-import { logActivity } from "../../common/activityLog";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { githubApp } from "../../../github/client.js";
+import { processPullRequestFiles } from "../../../github/utils/file-patch.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { ConflictDetectionScanPR, PullRequestSynchronize } from "../../../types/queue-payloads.js";
+import { PullRequestFile } from "../../../db/schema/PullRequestFile.js";
+import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue.js";
+import { logActivity } from "../../common/activityLog.js";
 
 export async function handlePullRequestSynchronize(payload: PullRequestSynchronize) {
     try {

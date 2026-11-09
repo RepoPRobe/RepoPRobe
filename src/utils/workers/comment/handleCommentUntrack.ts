@@ -1,10 +1,10 @@
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { Repo } from "../../../db/schema/Repo";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { CommentUntrack } from "../../../types/queue-payloads";
-import { addCommentReaction } from "../../common/comment";
-import { logActivity } from "../../common/activityLog";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { Repo } from "../../../db/schema/Repo.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { CommentUntrack } from "../../../types/queue-payloads.js";
+import { addCommentReaction } from "../../common/comment.js";
+import { logActivity } from "../../common/activityLog.js";
 
 export async function handleCommentUntrack(payload: CommentUntrack) {
     try {

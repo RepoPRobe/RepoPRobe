@@ -1,11 +1,11 @@
-import { GithubInstallation } from "../../../db/schema/GithubInstallation";
-import { PullRequest } from "../../../db/schema/PullRequest";
-import { Repo } from "../../../db/schema/Repo";
-import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { CommentCheck, ConflictDetectionScanPR } from "../../../types/queue-payloads";
-import { addCommentReaction, postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment";
-import { logActivity } from "../../common/activityLog";
+import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { Repo } from "../../../db/schema/Repo.js";
+import { conflictDetectionQueue } from "../../../queues/conflict-detection.queue.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { CommentCheck, ConflictDetectionScanPR } from "../../../types/queue-payloads.js";
+import { addCommentReaction, postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment.js";
+import { logActivity } from "../../common/activityLog.js";
 
 export async function handleCommentCheck(payload: CommentCheck) {
     try {

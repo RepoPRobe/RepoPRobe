@@ -1,16 +1,20 @@
 import 'dotenv/config';
 import { Webhooks } from '@octokit/webhooks';
 import express from 'express';
-import { connectDB } from './db/index.js';
+import { type Server } from 'node:http';
+import { closeDB, connectDB } from './db/index.js';
 import { installationQueue } from './queues/installation.queue.js';
+import { conflictDetectionQueue } from './queues/conflict-detection.queue.js';
 import { QUEUE_EVENTS } from './types/queue-events.js';
 import { CommentCheck, CommentHelp, CommentInvalidCommand, CommentStatus, CommentTrack, CommentUntrack, InstallationCreated, InstallationDeleted, InstallationRepositoriesAdded, InstallationRepositoriesRemoved, InstallationSuspend, PullRequestAssigned, PullRequestClosed, PullRequestConvertedToDraft, PullRequestEdited, PullRequestLabeled, PullRequestOpened, PullRequestReadyForReview, PullRequestReopened, PullRequestSynchronize, PullRequestUnassigned, PullRequestUnlabeled } from './types/queue-payloads.js';
 import { pullRequestQueue } from './queues/pull-request.queue.js';
 import { AllowedAuthorAssociations } from './utils/common/index.js';
 import { commentQueue } from './queues/comment.queue.js';
+import { redisConnection } from './utils/queue/connection.js';
 import { addCommentReaction, SupportedCommentCommands } from './utils/common/comment.js';
 import { serverAdapter } from './bull-board.js';
 import { apiRouter } from './routes/api.routes.js';
+import basicAuth from 'express-basic-auth';
 
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
 const PORT = process.env.PORT;
@@ -26,7 +30,13 @@ const server = express();
 const webhooks = new Webhooks({ secret: githubWebhookSecret });
 
 // bull-board endpoint
-server.use('/admin/queues', serverAdapter.getRouter());
+const bullBoardAuth = basicAuth({
+    users: {
+        [process.env.BULL_BOARD_USERNAME!]: process.env.BULL_BOARD_PASSWORD!,
+    },
+    challenge: true,
+});
+server.use('/admin/queues', bullBoardAuth, serverAdapter.getRouter());
 server.use('/api', apiRouter);
 
 server.post("/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
@@ -648,6 +658,76 @@ process.on('unhandledRejection', (reason, promise) => {
 
 async function main() {
     await connectDB();
-    server.listen(PORT, () => console.log(`Listening to port ${PORT}`));
+    if (shutdownRequested) return;
+    httpServer = server.listen(PORT, () => console.log(`Listening to port ${PORT}`));
 }
-main();
+
+let httpServer: Server | undefined;
+let shutdownRequested = false;
+let shutdownPromise: Promise<void> | undefined;
+let startupPromise: Promise<void> = Promise.resolve();
+
+const gracefulShutdown = (signal: string): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
+
+    shutdownRequested = true;
+    shutdownPromise = (async () => {
+        console.log(`Received ${signal}, shutting down gracefully...`);
+        let failed = false;
+
+        try {
+            await startupPromise;
+        } catch (error) {
+            failed = true;
+            console.error('Server startup failed:', error);
+        }
+
+        const serverToClose = httpServer;
+        if (serverToClose) {
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    serverToClose.close((error) => error ? reject(error) : resolve());
+                    serverToClose.closeIdleConnections();
+                });
+                console.log('HTTP server closed.');
+            } catch (error) {
+                failed = true;
+                console.error('Error closing HTTP server:', error);
+            }
+        }
+
+        const resourceClosures = await Promise.allSettled([
+            closeDB(),
+            installationQueue.close(),
+            pullRequestQueue.close(),
+            commentQueue.close(),
+            conflictDetectionQueue.close(),
+        ]);
+        for (const result of resourceClosures) {
+            if (result.status === 'rejected') {
+                failed = true;
+                console.error('Error closing server resource:', result.reason);
+            }
+        }
+
+        try {
+            await redisConnection.quit();
+            console.log('Redis connection closed.');
+        } catch (error) {
+            failed = true;
+            console.error('Error closing Redis connection:', error);
+        }
+
+        process.exitCode = failed ? 1 : 0;
+    })();
+
+    return shutdownPromise;
+};
+
+process.once('SIGINT', () => { void gracefulShutdown('SIGINT'); });
+process.once('SIGTERM', () => { void gracefulShutdown('SIGTERM'); });
+
+startupPromise = main();
+startupPromise.catch(() => {
+    void gracefulShutdown('startup failure');
+});

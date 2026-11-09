@@ -1,12 +1,12 @@
-import { Conflict } from "../../../db/schema/Conflict";
-import { GithubInstallation, GithubInstallationType } from "../../../db/schema/GithubInstallation";
-import { PullRequest, PullRequestType } from "../../../db/schema/PullRequest";
-import { commentQueue } from "../../../queues/comment.queue";
-import { QUEUE_EVENTS } from "../../../types/queue-events";
-import { BotCommentCustom, CommentStatus } from "../../../types/queue-payloads";
-import { postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment";
-import { logActivity } from "../../common/activityLog";
-import { Repo, RepoType } from "../../../db/schema/Repo";
+import { Conflict } from "../../../db/schema/Conflict.js";
+import { GithubInstallation, GithubInstallationType } from "../../../db/schema/GithubInstallation.js";
+import { PullRequest, PullRequestType } from "../../../db/schema/PullRequest.js";
+import { commentQueue } from "../../../queues/comment.queue.js";
+import { QUEUE_EVENTS } from "../../../types/queue-events.js";
+import { BotCommentCustom, CommentStatus } from "../../../types/queue-payloads.js";
+import { postComment, PR_NOT_TRACKED_COMMENT_MARKDOWN } from "../../common/comment.js";
+import { logActivity } from "../../common/activityLog.js";
+import { Repo, RepoType } from "../../../db/schema/Repo.js";
 
 export async function handleCommentStatus(payload: CommentStatus) {
     const formatDate = (date?: Date | null) => {

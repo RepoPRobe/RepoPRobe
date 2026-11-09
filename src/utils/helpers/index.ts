@@ -1,5 +1,5 @@
-import { ConflictType } from "../../db/schema/Conflict";
-import { PullRequest, PullRequestType } from "../../db/schema/PullRequest";
+import { ConflictType } from "../../db/schema/Conflict.js";
+import { PullRequest, PullRequestType } from "../../db/schema/PullRequest.js";
 
 /**
  * Generates below format markdown:

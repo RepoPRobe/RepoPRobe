@@ -1,12 +1,12 @@
 import { Worker } from 'bullmq';
-import { redisConnection } from '../utils/queue/connection';
-import { QUEUE_EVENTS } from '../types/queue-events';
-import { handleInstallationCreated } from '../utils/workers/installation/handleInstallationCreated';
-import { handleInstallationDeleted } from '../utils/workers/installation/handleInstallationDeleted';
-import { handleInstallationSuspend } from '../utils/workers/installation/handleInstallationSuspend';
-import { handleInstallationUnsuspend } from '../utils/workers/installation/handleInstallationUnsuspend';
-import { handleInstallationRepositoriesAdded } from '../utils/workers/installation/handleInstallationRepositoriesAdded';
-import { handleInstallationRepositoriesRemoved } from '../utils/workers/installation/handleInstallationRepositoriesRemoved';
+import { redisConnection } from '../utils/queue/connection.js';
+import { QUEUE_EVENTS } from '../types/queue-events.js';
+import { handleInstallationCreated } from '../utils/workers/installation/handleInstallationCreated.js';
+import { handleInstallationDeleted } from '../utils/workers/installation/handleInstallationDeleted.js';
+import { handleInstallationSuspend } from '../utils/workers/installation/handleInstallationSuspend.js';
+import { handleInstallationUnsuspend } from '../utils/workers/installation/handleInstallationUnsuspend.js';
+import { handleInstallationRepositoriesAdded } from '../utils/workers/installation/handleInstallationRepositoriesAdded.js';
+import { handleInstallationRepositoriesRemoved } from '../utils/workers/installation/handleInstallationRepositoriesRemoved.js';
 
 export const installationWorker = new Worker('installation', async (installationPayload) => {
     console.log(`Processing installation ${installationPayload.name}`, installationPayload.id);

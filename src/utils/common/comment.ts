@@ -1,4 +1,4 @@
-import { githubApp } from "../../github/client";
+import { githubApp } from "../../github/client.js";
 
 /**
  * check: run conflict detection
