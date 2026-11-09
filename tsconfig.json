@@ -1,8 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+<<<<<<< Updated upstream
     "module": "ES2022",
     "moduleResolution": "bundler",
+=======
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node", "express", "cors", "cookie-parser", "jsonwebtoken"],
+>>>>>>> Stashed changes
     "rootDir": "./src",
     "outDir": "./dist",
     "esModuleInterop": true,
