@@ -35,6 +35,10 @@ if (!bullBoardUsername?.trim() || !bullBoardPassword?.trim()) {
 const server = express();
 const webhooks = new Webhooks({ secret: githubWebhookSecret });
 
+server.get('/health', (_req, res) => {
+    res.status(200).send('OK');
+});
+
 // bull-board endpoint
 const bullBoardAuth = basicAuth({
     users: {

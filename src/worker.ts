@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import express from 'express';
 import { connectDB, closeDB } from "./db/index.js";
 import { commentWorker } from "./workers/comment.worker.js";
 import { conflictDetectionWorker } from "./workers/conflict-detection.worker.js";
@@ -9,6 +10,11 @@ import { installationQueue } from './queues/installation.queue.js';
 import { pullRequestQueue } from './queues/pull-request.queue.js';
 import { commentQueue } from './queues/comment.queue.js';
 import { conflictDetectionQueue } from './queues/conflict-detection.queue.js';
+
+const app = express();
+app.get('/health', (_req, res) => {
+    res.status(200).send('OK');
+});
 
 async function main() {
     console.log("Connecting to the database...");
@@ -27,6 +33,14 @@ async function main() {
         'Pull Request worker': true,
         'Comment worker': true,
         'Conflict Detection worker': true,
+    });
+
+    const port = process.env.WORKER_PORT;
+    if (!port) {
+        throw new Error('PORT env not set !!');
+    }
+    app.listen(port, () => {
+        console.log(`Health endpoint listening on port ${port}`);
     });
 }
 
