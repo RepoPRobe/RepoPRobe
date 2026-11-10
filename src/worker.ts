@@ -35,9 +35,9 @@ async function main() {
         'Conflict Detection worker': true,
     });
 
-    const port = process.env.WORKER_PORT;
+    const port = process.env.PORT;
     if (!port) {
-        throw new Error('WORKER_PORT env not set !!');
+        throw new Error('PORT env not set !!');
     }
     app.listen(port, () => {
         console.log(`Health endpoint listening on port ${port}`);
