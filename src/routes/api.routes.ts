@@ -109,7 +109,7 @@ apiRouter.post('/github-login', async (req, res) => {
             },
             {
                 upsert: true,
-                new: true,
+                returnDocument: 'after',
                 runValidators: true,
             }
         );
@@ -132,7 +132,7 @@ apiRouter.post('/github-login', async (req, res) => {
             message: 'Login Successful',
         });
     } catch (error) {
-        console.error('Error during GitHub login');
+        console.error('Error during GitHub login', error);
         return res.status(500).json({
             success: false,
             message: 'Internal server error',
