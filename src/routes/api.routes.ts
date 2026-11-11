@@ -1630,4 +1630,104 @@ apiRouter.get('/activity-logs', async (req, res) => {
     }
 });
 
+apiRouter.get('/untracked-open-pull-requests', async (req, res) => {
+    if (!req.user) {
+        console.error('User not authenticated');
+        return res.status(401).json({
+            success: false,
+            message: 'User not authenticated',
+        });
+    }
+    const installationId = req.query.installationId;
+    const repositoryId = req.query.repositoryId;
+    if (!installationId) {
+        console.error('Missing Installation ID:', installationId);
+        return res.status(400).json({
+            success: false,
+            message: 'Missing Installation ID.',
+        })
+    }
+    if (!repositoryId) {
+        console.error('Missing Repository ID:', installationId);
+        return res.status(400).json({
+            success: false,
+            message: 'Missing Repository ID.',
+        })
+    }
+    if (!isValidObjectId(installationId) || !isValidObjectId(repositoryId)) {
+        console.log('Invalid Installation ID or Repository ID:', installationId, repositoryId);
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid Installation ID or Repository ID.',
+        })
+    }
+
+    try {
+        const { accessToken } = req.user;
+        const octokit = new Octokit({ auth: accessToken });
+
+        const repoRecord = await Repo.findOne({
+            _id: new Types.ObjectId(repositoryId.toString()),
+            installationId: new Types.ObjectId(installationId.toString()),
+        }, { githubFullName: 1, installationId: 1 });
+        if (!repoRecord) {
+            return res.status(404).json({
+                success: false,
+                message: 'Repository not found.',
+            });
+        }
+
+        const [repoOwner, repoName] = repoRecord.githubFullName.split('/');
+        const { data: githubRepoRecord } = await octokit.rest.repos.get({
+            owner: repoOwner,
+            repo: repoName,
+        });
+
+        // check whether user has permission to view or not
+        if (!githubRepoRecord.permissions?.pull) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to view this repository.',
+            });
+        }
+
+        const repoOpenPrs = await octokit.paginate(
+            octokit.rest.pulls.list,
+            {
+                owner: repoOwner,
+                repo: repoName,
+                state: 'open',
+                per_page: 100,
+            }
+        );
+        const repoOpenPrGithubIds = repoOpenPrs.map(pr => pr.id.toString());
+        const untrackedOpenPrGithubIds = new Set(await PullRequest.find({
+            isTracked: true,
+            state: 'open',
+            githubPrId: { $in: repoOpenPrGithubIds },
+            installationId: repoRecord.installationId,
+            repoId: repoRecord._id,
+        }, { githubPrId: 1 }).distinct('githubPrId'));
+
+        return res.status(200).json({
+            success: true,
+            untrackedOpenPullRequests: repoOpenPrs.filter(
+                openPr => !untrackedOpenPrGithubIds.has(openPr.id.toString())
+            ).map(openPr => ({
+                githubId: openPr.id,
+                title: openPr.title,
+                prNumber: openPr.number,
+                htmlUrl: openPr.html_url,
+                updatedAt: openPr.updated_at,
+            })),
+        });
+    } catch (error) {
+        console.error('Error fetching untracked open pull requests:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error fetching untracked open pull requests',
+        });
+    }
+});
+
 export { apiRouter };

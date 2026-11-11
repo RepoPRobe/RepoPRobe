@@ -35,7 +35,11 @@ if (!bullBoardUsername?.trim() || !bullBoardPassword?.trim()) {
 const server = express();
 const webhooks = new Webhooks({ secret: githubWebhookSecret });
 
-server.get('/health', (_req, res) => {
+server.get('/health', (req, res) => {
+    console.log('Health check requested (server)', {
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+    });
     res.status(200).send('OK');
 });
 
