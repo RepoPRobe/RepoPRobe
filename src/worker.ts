@@ -12,7 +12,11 @@ import { commentQueue } from './queues/comment.queue.js';
 import { conflictDetectionQueue } from './queues/conflict-detection.queue.js';
 
 const app = express();
-app.get('/health', (_req, res) => {
+app.get('/health', (req, res) => {
+    console.log('Health check requested (worker)', {
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+    });
     res.status(200).send('OK');
 });
 
@@ -35,7 +39,7 @@ async function main() {
         'Conflict Detection worker': true,
     });
 
-    const port = process.env.PORT;
+    const port = process.env.NODE_ENV === 'development' ? 8081 : process.env.PORT;
     if (!port) {
         throw new Error('PORT env not set !!');
     }
