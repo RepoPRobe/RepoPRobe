@@ -107,7 +107,7 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
                 repoOwnerLogin: payload.repoOwnerLogin,
                 source: 'webhook',
             } satisfies ConflictDetectionScanPR, {
-                jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
+                jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}_${payload.afterCommitSha}`,
             });
             console.log(`Conflict detection scan job added for PR ${payload.prNumber} in repo ${payload.repoName} for installation ${installationRecord._id}`);
             await logActivity({
