@@ -6,7 +6,7 @@ import { closeDB, connectDB } from './db/index.js';
 import { installationQueue } from './queues/installation.queue.js';
 import { conflictDetectionQueue } from './queues/conflict-detection.queue.js';
 import { QUEUE_EVENTS } from './types/queue-events.js';
-import { CommentCheck, CommentHelp, CommentInvalidCommand, CommentStatus, CommentTrack, CommentUntrack, InstallationCreated, InstallationDeleted, InstallationRepositoriesAdded, InstallationRepositoriesRemoved, InstallationSuspend, PullRequestAssigned, PullRequestClosed, PullRequestConvertedToDraft, PullRequestEdited, PullRequestLabeled, PullRequestOpened, PullRequestReadyForReview, PullRequestReopened, PullRequestSynchronize, PullRequestUnassigned, PullRequestUnlabeled } from './types/queue-payloads.js';
+import { CommentCheck, CommentHelp, CommentInvalidCommand, CommentReprocess, CommentStatus, CommentTrack, CommentUntrack, InstallationCreated, InstallationDeleted, InstallationRepositoriesAdded, InstallationRepositoriesRemoved, InstallationSuspend, PullRequestAssigned, PullRequestClosed, PullRequestConvertedToDraft, PullRequestEdited, PullRequestLabeled, PullRequestOpened, PullRequestReadyForReview, PullRequestReopened, PullRequestSynchronize, PullRequestUnassigned, PullRequestUnlabeled } from './types/queue-payloads.js';
 import { pullRequestQueue } from './queues/pull-request.queue.js';
 import { AllowedAuthorAssociations } from './utils/common/index.js';
 import { commentQueue } from './queues/comment.queue.js';
@@ -627,6 +627,21 @@ webhooks.on("issue_comment.created", async ({ payload }) => {
                         jobId: `${QUEUE_EVENTS.COMMENT.HELP}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
                     });
                     console.log(`Added ${QUEUE_EVENTS.COMMENT.HELP} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
+                    break;
+                }
+                case 'reprocess': {
+                    await commentQueue.add(QUEUE_EVENTS.COMMENT.REPROCESS, {
+                        prNumber: payload.issue.number,
+                        repoName: payload.repository.name,
+                        repoOwnerLogin: payload.repository.owner.login,
+                        repoGithubId: payload.repository.id.toString(),
+                        installationId: payload.installation.id.toString(),
+                        githubCommentId: payload.comment.id,
+                        source: 'comment',
+                    } satisfies CommentReprocess, {
+                        jobId: `${QUEUE_EVENTS.COMMENT.REPROCESS}_${payload.installation.id}_${payload.repository.id}_${payload.issue.number}`,
+                    });
+                    console.log(`Added ${QUEUE_EVENTS.COMMENT.REPROCESS} job to queue for comment ${payload.comment.id} on PR ${payload.issue.number}`);
                     break;
                 }
                 default: {

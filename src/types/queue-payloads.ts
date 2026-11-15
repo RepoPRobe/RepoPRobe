@@ -227,6 +227,16 @@ export type CommentStatus = {
     installationId: string;
 }
 
+export type CommentReprocess = {
+    installationId: string;
+    repoGithubId: string;
+    repoOwnerLogin: string;
+    repoName: string;
+    prNumber: number;
+    githubCommentId?: number;
+    source: 'comment' | 'dashboard';
+}
+
 export type BotCommentConflictsFound = {
     installationId: number;
     repoName: string;

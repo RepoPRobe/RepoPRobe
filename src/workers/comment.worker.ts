@@ -8,6 +8,7 @@ import { handleCommentCheck } from '../utils/workers/comment/handleCommentCheck.
 import { handleBotCommentConflictsFound } from '../utils/workers/comment/handleBotCommentConflictsFound.js';
 import handleBotCommentCustom from '../utils/workers/comment/handleBotCommentCustom.js';
 import { handleCommentStatus } from '../utils/workers/comment/handleCommentStatus.js';
+import { handleCommentReprocess } from '../utils/workers/comment/handleCommentReprocess.js';
 
 export const commentWorker = new Worker('comment', async (commentPayload) => {
     console.log(`Processing comment ${commentPayload.name}`, commentPayload.id);
@@ -35,6 +36,9 @@ export const commentWorker = new Worker('comment', async (commentPayload) => {
             break;
         case QUEUE_EVENTS.COMMENT.STATUS:
             await handleCommentStatus(data);
+            break;
+        case QUEUE_EVENTS.COMMENT.REPROCESS:
+            await handleCommentReprocess(data);
             break;
         default:  // QUEUE_EVENTS.COMMENT.INVALID_COMMAND
             await handleCommentInvalidCommand(data);
