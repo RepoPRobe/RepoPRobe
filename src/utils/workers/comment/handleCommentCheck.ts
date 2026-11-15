@@ -113,5 +113,6 @@ export async function handleCommentCheck(payload: CommentCheck) {
         } catch (logError) {
             console.log("Error while logging activity for comment.check:", logError);
         }
+        throw error;
     }
 }

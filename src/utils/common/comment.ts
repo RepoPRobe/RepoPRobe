@@ -6,6 +6,7 @@ import { githubApp } from "../../github/client.js";
  * track: mark PR status to tracked
  * untrack: mark PR status to untracked
  * help: list all the commands supported by our system
+ * reprocess: re-run files processing for this PR
  */
 export const SupportedCommentCommands = [
     'check',
@@ -13,6 +14,7 @@ export const SupportedCommentCommands = [
     'track',
     'untrack',
     'help',
+    'reprocess',
 ]
 
 export async function postComment(installationId: number, repoName: string, repoOwnerLogin: string, issueNumber: number, body: string): Promise<number> {

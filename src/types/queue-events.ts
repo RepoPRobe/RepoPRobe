@@ -35,6 +35,7 @@ export const QUEUE_EVENTS = {
         TRACK: 'comment.track',
         UNTRACK: 'comment.untrack',
         INVALID_COMMAND: 'comment.invalid_command',
+        REPROCESS: 'comment.reprocess',
     },
     BOT_COMMENT: {
         CONFLICTS_FOUND: 'bot_comment.conflicts_found',

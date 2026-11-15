@@ -51,5 +51,6 @@ export async function handleInstallationDeleted(payload: InstallationDeleted) {
         } catch (logError) {
             console.log("Error logging activity for installation.deleted:", logError);
         }
+        throw error;
     }
 }

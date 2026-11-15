@@ -36,5 +36,6 @@ export async function handlePullRequestAssigned(payload: PullRequestAssigned) {
         console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId} with new assignee ${payload.assignee.login}`);
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.ASSIGNED}]:`, error);
+        throw error;
     }
 }

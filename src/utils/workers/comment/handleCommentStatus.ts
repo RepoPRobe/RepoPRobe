@@ -169,7 +169,7 @@ export async function handleCommentStatus(payload: CommentStatus) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.STATUS}:`, error);
 
         const context = await resolveStatusContext(false);
-        if (!context) return;
+        if (!context) throw error;
 
         await logActivity({
             installationId: context.installation._id,
@@ -179,5 +179,6 @@ export async function handleCommentStatus(payload: CommentStatus) {
             status: 'error',
             message: `Failed to post status for pull request #${payload.prNumber}`,
         });
+        throw error;
     }
 }

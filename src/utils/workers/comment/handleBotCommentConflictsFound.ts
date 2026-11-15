@@ -34,5 +34,6 @@ export async function handleBotCommentConflictsFound(payload: BotCommentConflict
         );
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.BOT_COMMENT.CONFLICTS_FOUND}:`, error);
+        throw error;
     }
 }

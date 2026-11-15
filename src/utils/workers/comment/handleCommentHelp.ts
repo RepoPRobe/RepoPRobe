@@ -12,13 +12,14 @@ const HELP_COMMENT = `
 | \`@RepoPRobe track\` | Enable conflict tracking for this PR |
 | \`@RepoPRobe untrack\` | Disable conflict tracking for this PR |
 | \`@RepoPRobe help\` | Show this commands list |
+| \`@RepoPRobe reprocess\` | Re-run files processing for this PR |
 
-### Reactions
+### Reactions from RepoPRobe Bot
 
 | Reaction | Meaning | Supported Commands/Comments |
 |---|---|---|
 | 👀 | Command received, will be acknowledged soon | \`all\` |
-| 👍 | Command processed successfully | \`track\`, \`untrack\`, \`check\` |
+| 👍 | Command processed successfully | \`track\`, \`untrack\`, \`check\`, \`reprocess\` |
 | 😕 | Unable to process your command (duplicate operation, something went wrong, or processing failed) | \`all\` |
 `;
 
@@ -41,12 +42,13 @@ export async function handleCommentHelp(payload: CommentHelp) {
         console.log(`Posted help comment for PR ${payload.prNumber} in repo ${payload.repoOwnerLogin}/${payload.repoName}`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.HELP}:`, error);
+        throw error;
     }
 }
 
 export async function handleCommentInvalidCommand(payload: CommentInvalidCommand) {
     try {
-        postComment(
+        await postComment(
             Number(payload.installationId),
             payload.repoName,
             payload.repoOwnerLogin,
@@ -56,5 +58,6 @@ export async function handleCommentInvalidCommand(payload: CommentInvalidCommand
         console.log(`Posted invalid command comment for PR ${payload.prNumber} in repo ${payload.repoOwnerLogin}/${payload.repoName}`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.INVALID_COMMAND}:`, error);
+        throw error;
     }
 }

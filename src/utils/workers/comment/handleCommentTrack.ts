@@ -186,13 +186,17 @@ export async function handleCommentTrack(payload: CommentTrack) {
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
         if (payload.source === 'comment' && payload.githubCommentId) {
-            await addCommentReaction(
-                Number(payload.installationId),
-                payload.repoName,
-                payload.repoOwnerLogin,
-                payload.githubCommentId,
-                'confused',
-            );
+            try {
+                await addCommentReaction(
+                    Number(payload.installationId),
+                    payload.repoName,
+                    payload.repoOwnerLogin,
+                    payload.githubCommentId,
+                    'confused',
+                );
+            } catch (reactionError) {
+                console.log(`Error reacting to failed ${QUEUE_EVENTS.COMMENT.TRACK}:`, reactionError);
+            }
         }
 
         try {
@@ -217,5 +221,6 @@ export async function handleCommentTrack(payload: CommentTrack) {
         } catch (error) {
             console.log(`Error logging activity for ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
         }
+        throw error;
     }
 }

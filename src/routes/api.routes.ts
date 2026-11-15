@@ -11,7 +11,7 @@ import { PullRequest } from '../db/schema/PullRequest.js';
 import { Conflict } from '../db/schema/Conflict.js';
 import { commentQueue } from '../queues/comment.queue.js';
 import { QUEUE_EVENTS } from '../types/queue-events.js';
-import { CommentTrack, CommentUntrack, ConflictDetectionScanPR, PullRequestOpened } from '../types/queue-payloads.js';
+import { CommentReprocess, CommentTrack, CommentUntrack, ConflictDetectionScanPR, PullRequestOpened } from '../types/queue-payloads.js';
 import { pullRequestQueue } from '../queues/pull-request.queue.js';
 import { conflictDetectionQueue } from '../queues/conflict-detection.queue.js';
 import { logActivity } from '../utils/common/activityLog.js';
@@ -1407,6 +1407,86 @@ apiRouter.get('/pullrequest/conflicts', async (req, res) => {
         return res.status(500).json({
             success: false,
             message: 'Error fetching pull request conflicts',
+        });
+    }
+});
+
+apiRouter.post('/pullrequest/reprocess', async (req, res) => {
+    try {
+        const { repositoryId, pullRequestId } = req.body;
+
+        if (!isValidObjectId(repositoryId) || !isValidObjectId(pullRequestId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Repository ID or Pull Request ID.',
+            });
+        }
+
+        const repositoryRecord = await Repo.findById(repositoryId, { installationId: 1, githubFullName: 1, githubId: 1, _id: 1 });
+        if (!repositoryRecord) {
+            return res.status(404).json({
+                success: false,
+                message: 'Repository not found.',
+            });
+        }
+        const octokit = new Octokit({ auth: req.user?.accessToken });
+        const [repoOwner, repoName] = repositoryRecord.githubFullName.split('/');
+        const { data: githubRepoRecord } = await octokit.rest.repos.get({
+            owner: repoOwner,
+            repo: repoName,
+        });
+
+        if (!githubRepoRecord.permissions?.push) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to reprocess this pull request. Please ensure you have push access to the repository.',
+            });
+        }
+
+        const pullRequestRecord = await PullRequest.findOne({
+            _id: new Types.ObjectId(pullRequestId),
+            repoId: repositoryRecord._id,
+            state: 'open',
+            isTracked: true,
+            deletedAt: null,
+        }, { installationId: 1, prNumber: 1, repoId: 1 });
+
+        if (!pullRequestRecord) {
+            return res.status(404).json({
+                success: false,
+                message: 'Pull request not found.',
+            });
+        }
+
+        const installation = await GithubInstallation.findById(pullRequestRecord.installationId, { installationId: 1, _id: 1 });
+        if (!installation) {
+            return res.status(404).json({
+                success: false,
+                message: 'Installation not found for the pull request.',
+            });
+        }
+
+        await commentQueue.add(QUEUE_EVENTS.COMMENT.REPROCESS, {
+            prNumber: pullRequestRecord.prNumber,
+            repoName: repoName,
+            repoOwnerLogin: repoOwner,
+            repoGithubId: repositoryRecord.githubId,
+            installationId: installation.installationId,
+            source: 'dashboard',
+        } satisfies CommentReprocess, {
+            jobId: `${QUEUE_EVENTS.COMMENT.REPROCESS}_${installation.installationId}_${repositoryRecord.githubId}_${pullRequestRecord.prNumber}`,
+        });
+        console.log(`Added ${QUEUE_EVENTS.COMMENT.REPROCESS} job to queue on PR ${pullRequestRecord.prNumber} in repo ${repoName} for installation ${installation.installationId} via dashboard`);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Pull request reprocessing initiated. Please check back after a few minutes to see the updated pull request details.',
+        });
+    } catch (error) {
+        console.log('Error reprocessing pull request:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error reprocessing pull request',
         });
     }
 });

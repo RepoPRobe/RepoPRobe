@@ -100,5 +100,6 @@ export async function handlePullRequestEdited(payload: PullRequestEdited) {
         } catch (logError) {
             console.log("Error while logging activity for pull_request.edited:", logError);
         }
+        throw error;
     }
 }

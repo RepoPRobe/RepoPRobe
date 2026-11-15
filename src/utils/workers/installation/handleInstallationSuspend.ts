@@ -44,5 +44,6 @@ export async function handleInstallationSuspend(payload: InstallationSuspend) {
         } catch (logError) {
             console.log("Error while logging activity for installation.suspend:", logError);
         }
+        throw error;
     }
 }
