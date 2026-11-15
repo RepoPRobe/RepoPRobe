@@ -69,8 +69,8 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
             }
         );
 
-        await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
         try {
+            await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
             if (prFilesResponse.length > 0) {
                 const convertedPatchObject = processPullRequestFiles(prFilesResponse);
                 await PullRequestFile.insertMany(

@@ -63,7 +63,7 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
         );
         if (!prRecord) {
             console.log(`No PR record found for installation ${payload.installationId} and PR ${payload.prNumber}`);
-            postComment(
+            await postComment(
                 Number(payload.installationId),
                 payload.repoName,
                 payload.repoOwnerLogin,
@@ -84,9 +84,9 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
             }
         );
 
+        await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
         if (prFiles.length > 0) {
             const convertedPatchObject = processPullRequestFiles(prFiles);
-            await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
             await PullRequestFile.insertMany(
                 convertedPatchObject.map(patchObj => ({
                     pullRequestId: prRecord._id,
@@ -102,58 +102,48 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
                     }))
                 }))
             );
-            await PullRequest.updateOne(
-                { _id: prRecord._id },
-                {
-                    $set: {
-                        processingStatus: 'completed',
-                    },
-                }
-            );
-            console.log(`Successfully inserted PR files for installation ${payload.installationId} and PR ${prRecord.githubPrId}`);
-
-            await conflictDetectionQueue.add(QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR, {
-                prId: prRecord._id.toString(),
-                installationId: Number(payload.installationId),
-                repoName: payload.repoName,
-                repoOwnerLogin: payload.repoOwnerLogin,
-                source: payload.source,
-            } satisfies ConflictDetectionScanPR, {
-                jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
-            });
-            console.log(`Conflict detection scan job added for PR ${payload.prNumber} in repo ${payload.repoName} for installation ${installationRecord._id}`);
-
-            if (payload.source === 'comment' && payload.githubCommentId) {
-                await addCommentReaction(
-                    Number(payload.installationId),
-                    payload.repoName,
-                    payload.repoOwnerLogin,
-                    payload.githubCommentId,
-                    '+1',
-                );
-            }
-
-            await logActivity({
-                installationId: installationRecord._id,
-                repoId: repoRecord._id,
-                pullRequestId: prRecord._id,
-                event: QUEUE_EVENTS.COMMENT.REPROCESS,
-                status: 'success',
-                message: `Pull request #${payload.prNumber} files were reprocessed successfully`,
-                metadata: { source: payload.source },
-            });
-        } else {
-            await logActivity({
-                installationId: installationRecord._id,
-                repoId: repoRecord._id,
-                pullRequestId: prRecord._id,
-                event: QUEUE_EVENTS.COMMENT.REPROCESS,
-                status: 'error',
-                message: `Could not reprocess pull request #${payload.prNumber}: no files were returned from GitHub`,
-                metadata: { source: payload.source },
-            });
-            throw new Error('Unable to fetch pull request files');
         }
+
+        await PullRequest.updateOne(
+            { _id: prRecord._id },
+            {
+                $set: {
+                    processingStatus: 'completed',
+                },
+            }
+        );
+        console.log(`Successfully refreshed PR files for installation ${payload.installationId} and PR ${prRecord.githubPrId}`);
+
+        await conflictDetectionQueue.add(QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR, {
+            prId: prRecord._id.toString(),
+            installationId: Number(payload.installationId),
+            repoName: payload.repoName,
+            repoOwnerLogin: payload.repoOwnerLogin,
+            source: payload.source,
+        } satisfies ConflictDetectionScanPR, {
+            jobId: `${QUEUE_EVENTS.CONFLICT_DETECTION.SCAN_PR}_${prRecord._id}`,
+        });
+        console.log(`Conflict detection scan job added for PR ${payload.prNumber} in repo ${payload.repoName} for installation ${installationRecord._id}`);
+
+        if (payload.source === 'comment' && payload.githubCommentId) {
+            await addCommentReaction(
+                Number(payload.installationId),
+                payload.repoName,
+                payload.repoOwnerLogin,
+                payload.githubCommentId,
+                '+1',
+            );
+        }
+
+        await logActivity({
+            installationId: installationRecord._id,
+            repoId: repoRecord._id,
+            pullRequestId: prRecord._id,
+            event: QUEUE_EVENTS.COMMENT.REPROCESS,
+            status: 'success',
+            message: `Pull request #${payload.prNumber} files were reprocessed successfully`,
+            metadata: { source: payload.source },
+        });
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.REPROCESS}:`, error);
     }
