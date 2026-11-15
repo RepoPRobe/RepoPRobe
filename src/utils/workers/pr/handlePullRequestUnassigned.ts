@@ -36,6 +36,5 @@ export async function handlePullRequestUnassigned(payload: PullRequestUnassigned
         console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId} with assignee removed ${payload.assignee.login}`);
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.UNASSIGNED}]:`, error);
-        throw error;
     }
 }

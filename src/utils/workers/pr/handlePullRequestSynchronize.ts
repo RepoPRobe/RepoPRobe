@@ -176,6 +176,5 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
         } catch (logError) {
             console.log("Error while logging activity for pull_request.synchronize:", logError);
         }
-        throw error;
     }
 }

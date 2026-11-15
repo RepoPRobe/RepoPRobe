@@ -157,13 +157,6 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
                 console.log(`Restored ${reposToRestore.length} repos for installation ${payload.installationId}`)
             }
 
-            if (insertedRepos.status === 'rejected') {
-                throw insertedRepos.reason;
-            }
-            if (restoredRepos.status === 'rejected') {
-                throw restoredRepos.reason;
-            }
-
             console.log(`Ignored ${reposToIgnore.size} repos for installation ${payload.installationId} as they were already present and not soft deleted.`);
         }
 
@@ -194,6 +187,5 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
         } catch (logError) {
             console.log("Error while logging activity for installation_repositories.added:", logError);
         }
-        throw error;
     }
 }

@@ -297,6 +297,5 @@ export async function handleConflictDetectionScanPR(payload: ConflictDetectionSc
         } catch (logError) {
             console.log("Error while logging activity for conflict detection scan:", logError);
         }
-        throw error;
     }
 }

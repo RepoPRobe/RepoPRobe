@@ -73,6 +73,5 @@ export async function handlePullRequestConvertedToDraft(payload: PullRequestConv
         } catch (logError) {
             console.log("Error while logging activity for pull_request.converted_to_draft:", logError);
         }
-        throw error;
     }
 }

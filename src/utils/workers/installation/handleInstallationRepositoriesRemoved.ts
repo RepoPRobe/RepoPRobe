@@ -66,6 +66,5 @@ export async function handleInstallationRepositoriesRemoved(payload: Installatio
         } catch (logError) {
             console.log("Error while logging activity for installation_repositories.removed:", logError);
         }
-        throw error;
     }
 }

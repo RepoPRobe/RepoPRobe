@@ -221,6 +221,5 @@ export async function handleCommentTrack(payload: CommentTrack) {
         } catch (error) {
             console.log(`Error logging activity for ${QUEUE_EVENTS.COMMENT.TRACK}:`, error);
         }
-        throw error;
     }
 }

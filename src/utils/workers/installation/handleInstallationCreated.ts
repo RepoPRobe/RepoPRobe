@@ -102,6 +102,5 @@ export async function handleInstallationCreated(payload: InstallationCreated) {
                 message: 'Failed to process GitHub App installation',
             });
         }
-        throw error;
     }
 }

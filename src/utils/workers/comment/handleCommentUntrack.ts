@@ -119,6 +119,5 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
         } catch (logError) {
             console.log("Error while logging activity for comment.untrack:", logError);
         }
-        throw error;
     }
 }

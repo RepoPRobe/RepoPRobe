@@ -156,6 +156,5 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
         }
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.REPROCESS}:`, error);
-        throw error;
     }
 }

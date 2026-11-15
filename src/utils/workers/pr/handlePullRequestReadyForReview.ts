@@ -70,6 +70,5 @@ export async function handlePullRequestReadyForReview(payload: PullRequestReadyF
         } catch (logError) {
             console.log("Error while logging activity for pull_request.ready_for_review:", logError);
         }
-        throw error;
     }
 }

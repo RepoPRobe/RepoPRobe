@@ -36,6 +36,5 @@ export async function handlePullRequestUnlabeled(payload: PullRequestUnlabeled) 
         console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId} with label removed ${payload.label.name}`);
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.UNLABELED}]:`, error);
-        throw error;
     }
 }

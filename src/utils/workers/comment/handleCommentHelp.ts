@@ -42,7 +42,6 @@ export async function handleCommentHelp(payload: CommentHelp) {
         console.log(`Posted help comment for PR ${payload.prNumber} in repo ${payload.repoOwnerLogin}/${payload.repoName}`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.HELP}:`, error);
-        throw error;
     }
 }
 
@@ -58,6 +57,5 @@ export async function handleCommentInvalidCommand(payload: CommentInvalidCommand
         console.log(`Posted invalid command comment for PR ${payload.prNumber} in repo ${payload.repoOwnerLogin}/${payload.repoName}`);
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.INVALID_COMMAND}:`, error);
-        throw error;
     }
 }

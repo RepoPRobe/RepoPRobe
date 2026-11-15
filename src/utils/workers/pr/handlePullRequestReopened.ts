@@ -73,6 +73,5 @@ export async function handlePullRequestReopened(payload: PullRequestReopened) {
                 });
             }
         }
-        throw error;
     }
 }

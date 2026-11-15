@@ -36,6 +36,5 @@ export async function handlePullRequestLabeled(payload: PullRequestLabeled) {
         console.log(`PR record updated for installation ${payload.installationId} and PR ${payload.prId} with new label ${payload.label}`);
     } catch (error) {
         console.log(`Error [${QUEUE_EVENTS.PULL_REQUEST.LABELED}]:`, error);
-        throw error;
     }
 }

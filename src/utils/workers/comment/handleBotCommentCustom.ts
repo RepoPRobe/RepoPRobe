@@ -13,6 +13,5 @@ export default async function handleBotCommentCustom(data: BotCommentCustom) {
         );
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.BOT_COMMENT.CUSTOM}:`, error);
-        throw error;
     }
 }
