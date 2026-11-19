@@ -92,11 +92,6 @@ export async function handleCommentStatus(payload: CommentStatus) {
             return;
         }
 
-        const commentBody = [
-            '## 📊 RepoProbe - PR Status',
-            '| Name | Value |',
-            '|-------|-------|',
-        ];
         const conflictState = {
             conflicts_found: '🔴 Conflicts Found',
             no_conflicts: '🟢 No Conflicts',
@@ -109,44 +104,53 @@ export async function handleCommentStatus(payload: CommentStatus) {
             error: '❌ Error',
         }[prRecord.processingStatus ?? 'pending'];
 
-        commentBody.push(`| Conflict Scan | ${conflictState} |`);
+        const commentBody = [
+            '### Pull request status',
+            `> _Tracked · Conflict scan: ${conflictState} · File processing: ${processing}_`,
+            '',
+            '<details>',
+            '<summary>Pull request details</summary>',
+            '',
+            '| Detail | Value |',
+            '|---|---|',
+        ];
+
         if (prRecord.conflictState && prRecord.conflictState === 'conflicts_found') {
             const conflicts = await Conflict.find({ prAId: prRecord._id });
             const conflictingPrsSet = new Set<string>();
             const conflictingFilesSet = new Set<string>();
-            let minLastChecked: number = new Date().getTime();
             let conflictsFound = 0;
+            let lastCheckedAt = Date.now();
 
             conflicts.forEach(conflict => {
-                if (!minLastChecked) minLastChecked = new Date(conflict.createdAt).getTime();
-                else minLastChecked = Math.min(minLastChecked, new Date(conflict.createdAt).getTime());
-
+                lastCheckedAt = Math.min(lastCheckedAt, new Date(conflict.createdAt).getTime());
                 conflictsFound += conflict.conflictingLineNumbers.removed.length + conflict.conflictingLineNumbers.added.length;
                 conflictingPrsSet.add(conflict.prBId.toString());
                 conflictingFilesSet.add(conflict.file);
             });
 
-            commentBody.push(`| Last Checked | ${formatDate(new Date(minLastChecked))} |`);
-            commentBody.push(`| Conflicting Pull Requests | ${conflictingPrsSet.size} |`);
-            commentBody.push(`| Conflicting Files | ${conflictingFilesSet.size} |`);
-            commentBody.push(`| Conflicts Found | ${conflictsFound} |`);
+            commentBody.push(`| Last checked | ${formatDate(new Date(lastCheckedAt))} |`);
+            commentBody.push(`| Conflicting pull requests | ${conflictingPrsSet.size} |`);
+            commentBody.push(`| Conflicting files | ${conflictingFilesSet.size} |`);
+            commentBody.push(`| Conflicts found | ${conflictsFound} |`);
         }
-        commentBody.push(`| PR Files Processing | ${processing} |`);
-        commentBody.push(`| This PR Head SHA | \`${prRecord.headBranchHeadSha}\` |`);
-        commentBody.push(`| Base Branch Head SHA | \`${prRecord.baseBranchHeadSha}\` |`);
+
+        commentBody.push(`| PR head SHA | \`${prRecord.headBranchHeadSha}\` |`);
+        commentBody.push(`| Base branch head SHA | \`${prRecord.baseBranchHeadSha}\` |`);
         if (prRecord.lastCommitAt) {
-            commentBody.push(`| Last Commit | ${formatDate(prRecord.lastCommitAt)} |`);
+            commentBody.push(`| Last commit | ${formatDate(prRecord.lastCommitAt)} |`);
         }
-        commentBody.push(`| Created On RepoPRobe | ${formatDate(prRecord.createdAt)} |`);
-        commentBody.push(`| Updated On RepoPRobe | ${formatDate(prRecord.updatedAt)} |`);
+        commentBody.push(`| Created on RepoPRobe | ${formatDate(prRecord.createdAt)} |`);
+        commentBody.push(`| Updated on RepoPRobe | ${formatDate(prRecord.updatedAt)} |`);
         if (prRecord.deletedAt) {
-            commentBody.push(`| Deleted From RepoPRobe | ${formatDate(prRecord.deletedAt)} |`);
+            commentBody.push(`| Deleted from RepoPRobe | ${formatDate(prRecord.deletedAt)} |`);
         }
-        commentBody.push('> [!NOTE]');
+        commentBody.push('</details>');
+
         if (prRecord.conflictState === 'conflicts_found') {
-            commentBody.push(`> ⚠️ Run \`@RepoPRobe check\` to see full conflict details.`);
+            commentBody.push('');
+            commentBody.push('Run `@RepoPRobe check` to view the conflict details.');
         }
-        commentBody.push('> 🤖 [RepoProbe](https://github.com/apps/repoprobe) · \`@RepoPRobe help\` for all commands');
 
         await commentQueue.add(QUEUE_EVENTS.BOT_COMMENT.CUSTOM, {
             prNumber: payload.prNumber,

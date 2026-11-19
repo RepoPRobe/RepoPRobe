@@ -46,10 +46,10 @@ export async function handleCommentCheck(payload: CommentCheck) {
         let message = null;
         let reaction: '+1' | 'confused' = '+1';
         if (prRecord?.state === 'merged' || prRecord?.githubMergedAt) {
-            message = 'Cannot Check Merged Pull Request';
+            message = '### Scan unavailable\n> _This pull request has been merged._';
             reaction = 'confused';
         } else if (prRecord?.state === 'closed' || prRecord?.githubClosedAt) {
-            message = 'Cannot Check Closed Pull Request';
+            message = '### Scan unavailable\n> _This pull request is closed._';
             reaction = 'confused';
         } else if (!prRecord || prRecord.deletedAt || !prRecord.isTracked) {
             message = PR_NOT_TRACKED_COMMENT_MARKDOWN;

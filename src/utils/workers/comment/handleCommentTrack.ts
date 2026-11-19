@@ -52,8 +52,8 @@ export async function handleCommentTrack(payload: CommentTrack) {
 
             if (pr.merged_at || pr.state !== 'open') {
                 const message = pr.merged_at
-                    ? 'Cannot Track Merged Pull Request'
-                    : 'Cannot Track Closed Pull Request';
+                    ? '### Cannot track this PR\n> _This pull request has already been merged._'
+                    : '### Cannot track this PR\n> _This pull request is closed._';
                 await postComment(
                     Number(payload.installationId),
                     payload.repoName,
@@ -129,13 +129,13 @@ export async function handleCommentTrack(payload: CommentTrack) {
         let message = null;
         let reaction: '+1' | 'confused' = '+1';
         if (prRecord.state === 'merged' || prRecord.githubMergedAt) {
-            message = 'Cannot Track Merged Pull Request';
+            message = '### Cannot track this PR\n> _This pull request has already been merged._';
             reaction = 'confused';
         } else if (prRecord.state === 'closed' || prRecord.githubClosedAt) {
-            message = 'Cannot Track Closed Pull Request';
+            message = '### Cannot track this PR\n> _This pull request is closed._';
             reaction = 'confused';
         } else if (prRecord.isTracked) {
-            message = 'Pull Request is Already Tracked';
+            message = '### Already tracked\n> _This pull request is already being tracked._';
         }
 
         if (message) {
