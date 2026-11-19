@@ -68,7 +68,11 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
                 payload.repoName,
                 payload.repoOwnerLogin,
                 payload.prNumber,
-                `Cannot reprocess files for PR #${payload.prNumber} as it is either not tracked, closed, or currently being processed.`
+                [
+                    '### Files can\'t be reprocessed',
+                    '> _This PR must be open and tracked, and its files must not already be processing._',
+                    'Run `@RepoPRobe status` for the current status.',
+                ].join('\n')
             );
             return;
         }

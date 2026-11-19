@@ -3,31 +3,20 @@ import { CommentHelp, CommentInvalidCommand } from "../../../types/queue-payload
 import { postComment } from "../../common/comment.js";
 
 const HELP_COMMENT = `
-## 📋 RepoProbe Commands
+### RepoPRobe commands
 
-| Command | Description |
-|---------|-------------|
-| \`@RepoPRobe check\` | Re-run conflict detection on this PR |
-| \`@RepoPRobe status\` | Show current PR info, tracking state, conflict status, last checked |
-| \`@RepoPRobe track\` | Enable conflict tracking for this PR |
-| \`@RepoPRobe untrack\` | Disable conflict tracking for this PR |
-| \`@RepoPRobe help\` | Show this commands list |
-| \`@RepoPRobe reprocess\` | Re-run files processing for this PR |
+- \`@RepoPRobe check\` — scan this PR for conflicts
+- \`@RepoPRobe status\` — view tracking, scan, and processing status
+- \`@RepoPRobe track\`, \`@RepoPRobe untrack\` — enable or disable tracking
+- \`@RepoPRobe reprocess\` — refresh the PR files and scan again
+- \`@RepoPRobe help\` — show this command list
 
-### Reactions from RepoPRobe Bot
-
-| Reaction | Meaning | Supported Commands/Comments |
-|---|---|---|
-| 👀 | Command received, will be acknowledged soon | \`all\` |
-| 👍 | Command processed successfully | \`track\`, \`untrack\`, \`check\`, \`reprocess\` |
-| 😕 | Unable to process your command (duplicate operation, something went wrong, or processing failed) | \`all\` |
+Reactions: 👀 received · 👍 completed · 😕 couldn't complete
 `;
 
 const INVALID_COMMENT = `
-> [!NOTE]
-> The command you entered is not recognized. Below is the list of supported commands.
-
-${HELP_COMMENT}
+### Unknown command
+> _Use \`@RepoPRobe help\` to see the available commands._
 `;
 
 export async function handleCommentHelp(payload: CommentHelp) {

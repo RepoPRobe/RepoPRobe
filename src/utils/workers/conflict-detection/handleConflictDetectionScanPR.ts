@@ -7,6 +7,7 @@ import { BotCommentConflictsFound, BotCommentCustom, ConflictDetectionScanPR } f
 import { Conflict } from "../../../db/schema/Conflict.js";
 import { commentQueue } from "../../../queues/comment.queue.js";
 import { logActivity } from "../../common/activityLog.js";
+import { NO_CONFLICTS_COMMENT_MARKDOWN } from "../../common/comment.js";
 
 type ConflictingDataFromHunk = {
     file: string;
@@ -72,17 +73,13 @@ export async function handleConflictDetectionScanPR(payload: ConflictDetectionSc
             deletedAt: null,
         }, { _id: 1 });
         const potentialConflictingPrIds = potentialConflictingPrRecords.map(pr => pr._id);
-
         if (potentialConflictingPrIds.length === 0) {
             await commentQueue.add(QUEUE_EVENTS.BOT_COMMENT.CUSTOM, {
                 prNumber: prRecord.prNumber,
                 installationId: payload.installationId,
                 repoName: payload.repoName,
                 repoOwnerLogin: payload.repoOwnerLogin,
-                commentBody: [
-                    '**No conflicts found.** ✅',
-                    '> RepoProbe checked this PR for potential conflicts with other active pull requests.',
-                ].join('\n'),
+                commentBody: NO_CONFLICTS_COMMENT_MARKDOWN,
             } satisfies BotCommentCustom, {
                 jobId: `${QUEUE_EVENTS.BOT_COMMENT.CUSTOM}_${payload.prId}_NO_CONFLICTS_FOUND`,
             });
@@ -202,10 +199,7 @@ export async function handleConflictDetectionScanPR(payload: ConflictDetectionSc
                 installationId: payload.installationId,
                 repoName: payload.repoName,
                 repoOwnerLogin: payload.repoOwnerLogin,
-                commentBody: [
-                    '**No conflicts found.** ✅',
-                    '> RepoProbe checked this PR for potential conflicts with other active pull requests.',
-                ].join('\n'),
+                commentBody: NO_CONFLICTS_COMMENT_MARKDOWN,
             } satisfies BotCommentCustom, {
                 jobId: `${QUEUE_EVENTS.BOT_COMMENT.CUSTOM}_${payload.prId}_NO_CONFLICTS_FOUND`,
             });
