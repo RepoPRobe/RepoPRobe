@@ -12,7 +12,6 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         );
@@ -25,7 +24,6 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
             {
                 installationId: installationRecord._id,
                 githubId: payload.repoId,
-                deletedAt: null,
             },
             { _id: 1 }
         );

@@ -70,7 +70,6 @@ export async function handleConflictDetectionScanPR(payload: ConflictDetectionSc
             isTracked: true,
             githubClosedAt: null,
             githubMergedAt: null,
-            deletedAt: null,
         }, { _id: 1 });
         const potentialConflictingPrIds = potentialConflictingPrRecords.map(pr => pr._id);
         if (potentialConflictingPrIds.length === 0) {

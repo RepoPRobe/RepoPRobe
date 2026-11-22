@@ -25,13 +25,10 @@ export async function handleInstallationRepositoriesRemoved(payload: Installatio
             },
             { _id: 1, githubFullName: 1 },
         );
-        await Repo.updateMany(
-            {
-                installationId: installationId._id,
-                githubId: { $in: reposToDelete.map(repo => repo.githubId) }
-            },
-            { $set: { deletedAt: new Date() } },
-        );
+        await Repo.deleteMany({
+            installationId: installationId._id,
+            githubId: { $in: reposToDelete.map(repo => repo.githubId) }
+        });
         const parentLogId = await logActivity({
             installationId: installationId._id,
             event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED,

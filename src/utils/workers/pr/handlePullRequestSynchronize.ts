@@ -15,7 +15,6 @@ export async function handlePullRequestSynchronize(payload: PullRequestSynchroni
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

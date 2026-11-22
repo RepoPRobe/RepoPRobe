@@ -6,25 +6,16 @@ import { QUEUE_EVENTS } from "../../../types/queue-events.js";
 
 export async function handleInstallationDeleted(payload: InstallationDeleted) {
     try {
-        const githubInstallation = await GithubInstallation.findOneAndUpdate(
-            {
-                installationId: payload.installationId,
-                deletedAt: { $eq: null },
-            },
-            { $set: { deletedAt: new Date() } },
-            { projection: { _id: 1 } },
-        );
+        const githubInstallation = await GithubInstallation.findOneAndDelete({
+            installationId: payload.installationId,
+        });
 
         if (!githubInstallation) {
             console.log(`No GithubInstallation found or already deleted found for installation ${payload.installationId}`);
             return;
         }
 
-        await Repo.updateMany(
-            { installationId: githubInstallation?._id },
-            { $set: { deletedAt: new Date() } }
-        );
-
+        await Repo.deleteMany({ installationId: githubInstallation?._id });
         await logActivity({
             installationId: githubInstallation._id,
             event: QUEUE_EVENTS.INSTALLATION.DELETED,

@@ -15,7 +15,6 @@ export async function handlePullRequestReopened(payload: PullRequestReopened) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

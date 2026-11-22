@@ -451,7 +451,7 @@ apiRouter.get('/get-repository', async (req, res) => {
 
             // conflicting PRs
             const activePRIds = totalPRsInRepoPRobe
-                .filter(pr => pr.isTracked && pr.state === 'open' && pr.deletedAt === null)
+                .filter(pr => pr.isTracked && pr.state === 'open')
                 .map(pr => pr._id);
             const conflictingPRs = await Conflict.find({
                 $or: [
@@ -1448,7 +1448,6 @@ apiRouter.post('/pullrequest/reprocess', async (req, res) => {
             repoId: repositoryRecord._id,
             state: 'open',
             isTracked: true,
-            deletedAt: null,
         }, { installationId: 1, prNumber: 1, repoId: 1 });
 
         if (!pullRequestRecord) {

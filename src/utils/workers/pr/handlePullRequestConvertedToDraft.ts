@@ -10,7 +10,6 @@ export async function handlePullRequestConvertedToDraft(payload: PullRequestConv
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

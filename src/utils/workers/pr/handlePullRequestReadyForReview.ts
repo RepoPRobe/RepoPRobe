@@ -10,7 +10,6 @@ export async function handlePullRequestReadyForReview(payload: PullRequestReadyF
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

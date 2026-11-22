@@ -41,9 +41,6 @@ export async function handleInstallationCreated(payload: InstallationCreated) {
                             githubId: repo.id,
                         },
                         update: {
-                            $set: {
-                                deletedAt: null,
-                            },
                             $setOnInsert: {
                                 installationId: githubInstallation._id,
                                 installedOn: new Date(payload.installationInstalledOn),

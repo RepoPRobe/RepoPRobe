@@ -32,7 +32,6 @@ export interface PullRequestType {
     isTracked: boolean;
     processingStatus: 'pending' | 'processing' | 'completed' | 'error';
     conflictState: 'no_conflicts' | 'conflicts_found' | 'unknown';
-    deletedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -83,7 +82,6 @@ const pullRequestSchema = new Schema<PullRequestType>({
         enum: ['no_conflicts', 'conflicts_found', 'unknown'],
         default: 'unknown'
     },
-    deletedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 pullRequestSchema.index({ repoId: 1, githubPrId: 1 }, { unique: true });

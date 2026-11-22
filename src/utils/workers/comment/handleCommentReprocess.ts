@@ -16,7 +16,6 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )
@@ -29,7 +28,6 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
             {
                 installationId: installationRecord._id,
                 githubId: payload.repoGithubId,
-                deletedAt: null,
             },
             { _id: 1 },
         );
@@ -45,7 +43,6 @@ export async function handleCommentReprocess(payload: CommentReprocess) {
                 prNumber: payload.prNumber,
                 state: 'open',
                 isTracked: true,
-                deletedAt: { $eq: null },
             },
             {
                 $set: {
