@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { ActivityLog } from '../../db/schema/ActivityLogs.js';
 
 type ActivityStatus = 'info' | 'success' | 'warning' | 'error';
@@ -19,12 +19,12 @@ const toObjectId = (id: Types.ObjectId | string | null | undefined) => {
     return id instanceof Types.ObjectId ? id : new Types.ObjectId(id);
 };
 
-export async function logActivity(input: LogActivityInput) {
+export async function logActivity(input: LogActivityInput, session?: ClientSession) {
     try {
         const installationId = toObjectId(input.installationId);
         if (!installationId) return;
 
-        const log = await ActivityLog.create({
+        const [log] = await ActivityLog.create([{
             installationId,
             repoId: toObjectId(input.repoId),
             pullRequestId: toObjectId(input.pullRequestId),
@@ -33,7 +33,7 @@ export async function logActivity(input: LogActivityInput) {
             status: input.status,
             message: input.message,
             metadata: input.metadata,
-        });
+        }], session ? { session } : undefined);
         return log._id;
     } catch (error) {
         console.log('Error writing activity log:', error, 'Input:', input);

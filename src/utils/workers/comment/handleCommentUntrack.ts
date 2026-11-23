@@ -5,55 +5,75 @@ import { QUEUE_EVENTS } from "../../../types/queue-events.js";
 import { CommentUntrack } from "../../../types/queue-payloads.js";
 import { addCommentReaction } from "../../common/comment.js";
 import { logActivity } from "../../common/activityLog.js";
+import mongoose from "mongoose";
+import { PullRequestFile } from "../../../db/schema/PullRequestFile.js";
+import { Conflict } from "../../../db/schema/Conflict.js";
 
 export async function handleCommentUntrack(payload: CommentUntrack) {
+    const session = await mongoose.startSession();
+
     try {
-        const installationRecord = await GithubInstallation.findOne(
-            {
-                installationId: payload.installationId,
-                suspendedAt: { $eq: null },
-            },
-            { _id: 1 },
-        );
-        if (!installationRecord) {
-            console.log(`No installation record found for installation ${payload.installationId}`);
-            return;
-        }
-
-        const repoRecord = await Repo.findOne(
-            {
-                installationId: installationRecord._id,
-                githubId: payload.repoId,
-            },
-            { _id: 1 }
-        );
-        if (!repoRecord) {
-            console.log(`No repo record found for repo ${payload.repoId}`);
-            return;
-        }
-
-        const prRecord = await PullRequest.findOneAndUpdate(
-            {
-                installationId: installationRecord._id,
-                repoId: repoRecord._id,
-                prNumber: payload.prNumber,
-                isTracked: true,
-                githubClosedAt: null,
-                githubMergedAt: null,
-            },
-            {
-                $set: {
-                    isTracked: false,
+        await session.withTransaction(async () => {
+            const installationRecord = await GithubInstallation.findOne(
+                {
+                    installationId: payload.installationId,
+                    suspendedAt: { $eq: null },
                 },
-            },
-            {
-                projection: {
-                    _id: 1,
-                },
+                { _id: 1 },
+            ).session(session);
+
+            if (!installationRecord) {
+                console.log(`No installation record found for installation ${payload.installationId}`);
+                return;
             }
-        );
 
-        if (prRecord) {
+            const repoRecord = await Repo.findOne(
+                {
+                    installationId: installationRecord._id,
+                    githubId: payload.repoId,
+                },
+                { _id: 1 }
+            ).session(session);
+
+            if (!repoRecord) {
+                console.log(`No repo record found for repo ${payload.repoId}`);
+                return;
+            }
+
+            const prRecord = await PullRequest.findOneAndUpdate(
+                {
+                    installationId: installationRecord._id,
+                    repoId: repoRecord._id,
+                    prNumber: payload.prNumber,
+                    githubClosedAt: null,
+                    githubMergedAt: null,
+                },
+                {
+                    $set: {
+                        isTracked: false,
+                    },
+                },
+                {
+                    projection: {
+                        _id: 1,
+                    },
+                }
+            ).session(session);
+
+            if (!prRecord) {
+                if (payload.source === 'comment' && payload.githubCommentId) {
+                    await addCommentReaction(
+                        Number(payload.installationId),
+                        payload.repoName,
+                        payload.repoOwnerLogin,
+                        payload.githubCommentId,
+                        'confused',
+                    );
+                }
+                console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is not found or already untracked`);
+                return;
+            }
+
             if (payload.source === 'comment' && payload.githubCommentId) {
                 await addCommentReaction(
                     Number(payload.installationId),
@@ -63,6 +83,16 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
                     '+1',
                 );
             }
+
+            await PullRequestFile.deleteMany({
+                pullRequestId: prRecord._id
+            }).session(session);
+            await Conflict.deleteMany({
+                $or: [
+                    { prAId: prRecord._id },
+                    { prBId: prRecord._id },
+                ],
+            }).session(session);
             await logActivity({
                 installationId: installationRecord._id,
                 repoId: repoRecord._id,
@@ -71,28 +101,9 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
                 status: 'success',
                 message: `Pull request #${payload.prNumber} is now untracked`,
                 metadata: { source: payload.source },
-            });
+            }, session);
             console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now untracked`);
-        } else {
-            if (payload.source === 'comment' && payload.githubCommentId) {
-                await addCommentReaction(
-                    Number(payload.installationId),
-                    payload.repoName,
-                    payload.repoOwnerLogin,
-                    payload.githubCommentId,
-                    'confused',
-                );
-            }
-            await logActivity({
-                installationId: installationRecord._id,
-                repoId: repoRecord._id,
-                event: QUEUE_EVENTS.COMMENT.UNTRACK,
-                status: 'warning',
-                message: `Pull request #${payload.prNumber} was not found or is already untracked`,
-                metadata: { source: payload.source },
-            });
-            console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is not found or already untracked`);
-        }
+        });
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.UNTRACK}:`, error);
         try {
@@ -117,5 +128,7 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
         } catch (logError) {
             console.log("Error while logging activity for comment.untrack:", logError);
         }
+    } finally {
+        session.endSession();
     }
 }
