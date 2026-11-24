@@ -1,8 +1,9 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
 import { Repo } from "../../../db/schema/Repo.js";
 import { RepoConfig } from "../../../db/schema/RepoConfig.js";
+import { installationQueue } from "../../../queues/installation.queue.js";
 import { QUEUE_EVENTS } from "../../../types/queue-events.js";
-import { InstallationRepositoriesAdded } from "../../../types/queue-payloads.js";
+import { InstallationRepositoriesAdded, InstallationRepositoriesRemoved } from "../../../types/queue-payloads.js";
 import { logActivity } from "../../common/activityLog.js";
 
 export async function handleInstallationRepositoriesAdded(payload: InstallationRepositoriesAdded) {
@@ -31,11 +32,18 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
             const reposToDelete = allRepos.filter(repo => !addedReposGithubIds.includes(repo.githubId));
             const reposToDeleteGithubIds = reposToDelete.map(repo => repo.githubId);
 
-            // no need of await as we are just soft deleting
-            Repo.deleteMany({
-                installationId: installationDoc._id,
-                githubId: { $in: reposToDeleteGithubIds },
-            }).catch(err => console.log("Error while soft deleting repos after installation selection changed to 'selected':", err));
+            if (reposToDeleteGithubIds.length > 0) {
+                await installationQueue.add(
+                    QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED,
+                    {
+                        installationId: payload.installationId,
+                        repositoriesRemoved: reposToDeleteGithubIds.map(id => ({ id })),
+                    } satisfies InstallationRepositoriesRemoved,
+                    {
+                        jobId: `${QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED}_${payload.installationId}_${reposToDeleteGithubIds.join('_')}`,
+                    },
+                );
+            }
 
             const parentLogId = await logActivity({
                 installationId: installationDoc._id,
@@ -64,7 +72,7 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
                     installationId: installationDoc._id,
                     githubId: { $in: reposToAdd.map(repo => repo.id.toString()) },
                 },
-                { githubId: 1 }
+                { githubId: 1, _id: 1 }
             );
             const existingRepoByGithubIds = new Set(existingRepos.map(repo => repo.githubId));
             const reposToCreate = reposToAdd
@@ -78,10 +86,23 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
                 }));
 
             const insertedRepos = await Repo.insertMany(reposToCreate);
+            const repositoriesToConfigure = [...existingRepos, ...insertedRepos];
+            if (repositoriesToConfigure.length > 0) {
+                const existingRepoConfigs = await RepoConfig.find(
+                    { repoId: { $in: repositoriesToConfigure.map(repo => repo._id) } },
+                    { repoId: 1 },
+                );
+                const configuredRepoIds = new Set(existingRepoConfigs.map(config => config.repoId.toString()));
+                const missingRepoConfigs = repositoriesToConfigure
+                    .filter(repo => !configuredRepoIds.has(repo._id.toString()))
+                    .map(repo => ({ repoId: repo._id }));
+
+                if (missingRepoConfigs.length > 0) {
+                    await RepoConfig.insertMany(missingRepoConfigs);
+                }
+            }
+
             if (insertedRepos.length > 0) {
-                await RepoConfig.insertMany(insertedRepos.map(repo => ({
-                    repoId: repo._id,
-                })));
                 await Promise.all(insertedRepos.map(repo => logActivity({
                     installationId: installationDoc._id,
                     repoId: repo._id,

@@ -1,7 +1,9 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
 import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { PullRequestFile } from "../../../db/schema/PullRequestFile.js";
 import { Repo } from "../../../db/schema/Repo.js";
 import { githubApp } from "../../../github/client.js";
+import { processPullRequestFiles } from "../../../github/utils/file-patch.js";
 import { pullRequestQueue } from "../../../queues/pull-request.queue.js";
 import { QUEUE_EVENTS } from "../../../types/queue-events.js";
 import { CommentTrack, PullRequestOpened } from "../../../types/queue-payloads.js";
@@ -153,7 +155,37 @@ export async function handleCommentTrack(payload: CommentTrack) {
             return;
         }
 
-        // At this point, simply mark PR as tracked
+        const octokit = await githubApp.getInstallationOctokit(Number(payload.installationId));
+        const prFiles = await octokit.paginate(
+            octokit.rest.pulls.listFiles,
+            {
+                owner: payload.repoOwnerLogin,
+                repo: payload.repoName,
+                pull_number: payload.prNumber,
+                per_page: 100,
+            }
+        );
+
+        await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
+        if (prFiles.length > 0) {
+            const convertedPatchObject = processPullRequestFiles(prFiles);
+            await PullRequestFile.insertMany(
+                convertedPatchObject.map(patchObj => ({
+                    pullRequestId: prRecord._id,
+                    file: patchObj.file,
+                    status: patchObj.status,
+                    previousFilePath: patchObj.previousFilePath,
+                    hunks: patchObj.hunks.map(hunk => ({
+                        oldFileStartLine: hunk.oldFileStartLine,
+                        oldFilePatchLinesCount: hunk.oldFilePatchLinesCount,
+                        newFileStartLine: hunk.newFileStartLine,
+                        newFilePatchLinesCount: hunk.newFilePatchLinesCount,
+                        lines: hunk.lines,
+                    }))
+                }))
+            );
+        }
+
         prRecord.isTracked = true;
         await prRecord.save();
 

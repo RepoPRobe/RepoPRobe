@@ -280,9 +280,33 @@ webhooks.on("pull_request.reopened", async ({ payload }) => {
 
         await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.REOPENED, {
             installationId: payload.installation.id.toString(),
+            repositoryId: payload.repository.id.toString(),
+            repoOwnerLogin: payload.repository.owner.login,
+            repoName: payload.repository.name,
             prId: payload.pull_request.id.toString(),
+            prNumber: payload.pull_request.number,
+            prTitle: payload.pull_request.title,
+            prHtmlUrl: payload.pull_request.html_url,
             prState: payload.pull_request.state,
-            updatedAt: payload.pull_request.updated_at,
+            isDraft: payload.pull_request.draft,
+            baseBranchRef: payload.pull_request.base.ref,
+            baseBranchHeadSha: payload.pull_request.base.sha,
+            headBranchRef: payload.pull_request.head.ref,
+            headBranchHeadSha: payload.pull_request.head.sha,
+            author: {
+                id: payload.pull_request.user.id.toString(),
+                login: payload.pull_request.user.login,
+                avatarUrl: payload.pull_request.user.avatar_url,
+                githubUrl: payload.pull_request.user.html_url,
+                userType: payload.pull_request.user.type,
+            },
+            prLabels: payload.pull_request.labels.map(label => ({
+                id: label.id.toString(),
+                name: label.name,
+                default: label.default,
+            })),
+            prCreatedOn: payload.pull_request.created_at,
+            prUpdatedAt: payload.pull_request.updated_at,
         } satisfies PullRequestReopened, {
             jobId: `${QUEUE_EVENTS.PULL_REQUEST.REOPENED}_${payload.installation.id}_${payload.pull_request.id}`,
         });

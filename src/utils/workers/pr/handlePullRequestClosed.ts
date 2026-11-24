@@ -127,6 +127,7 @@ export async function handlePullRequestClosed(payload: PullRequestClosed) {
         } catch (logError) {
             console.log(`Error while logging activity for ${QUEUE_EVENTS.PULL_REQUEST.CLOSED}:`, logError);
         }
+        throw error;
     } finally {
         await session.endSession();
     }

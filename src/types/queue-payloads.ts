@@ -87,12 +87,7 @@ export type PullRequestClosed = {
     updatedAt: string;
 }
 
-export type PullRequestReopened = {
-    installationId: string;
-    prId: string;
-    prState: string;
-    updatedAt: string;
-}
+export type PullRequestReopened = Omit<PullRequestOpened, 'replacementRecordId' | 'source'>;
 
 export type PullRequestEdited = {
     installationId: string;

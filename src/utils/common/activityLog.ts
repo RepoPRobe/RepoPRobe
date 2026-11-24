@@ -37,5 +37,6 @@ export async function logActivity(input: LogActivityInput, session?: ClientSessi
         return log._id;
     } catch (error) {
         console.log('Error writing activity log:', error, 'Input:', input);
+        if (session?.inTransaction()) throw error;
     }
 }

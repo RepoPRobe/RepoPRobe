@@ -13,7 +13,7 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
     const session = await mongoose.startSession();
 
     try {
-        await session.withTransaction(async () => {
+        const reaction = await session.withTransaction(async (): Promise<'confused' | '+1' | undefined> => {
             const installationRecord = await GithubInstallation.findOne(
                 {
                     installationId: payload.installationId,
@@ -45,6 +45,7 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
                     installationId: installationRecord._id,
                     repoId: repoRecord._id,
                     prNumber: payload.prNumber,
+                    isTracked: true,
                     githubClosedAt: null,
                     githubMergedAt: null,
                 },
@@ -61,27 +62,8 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
             ).session(session);
 
             if (!prRecord) {
-                if (payload.source === 'comment' && payload.githubCommentId) {
-                    await addCommentReaction(
-                        Number(payload.installationId),
-                        payload.repoName,
-                        payload.repoOwnerLogin,
-                        payload.githubCommentId,
-                        'confused',
-                    );
-                }
                 console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is not found or already untracked`);
-                return;
-            }
-
-            if (payload.source === 'comment' && payload.githubCommentId) {
-                await addCommentReaction(
-                    Number(payload.installationId),
-                    payload.repoName,
-                    payload.repoOwnerLogin,
-                    payload.githubCommentId,
-                    '+1',
-                );
+                return 'confused';
             }
 
             await PullRequestFile.deleteMany({
@@ -103,7 +85,18 @@ export async function handleCommentUntrack(payload: CommentUntrack) {
                 metadata: { source: payload.source },
             }, session);
             console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} is now untracked`);
+            return '+1';
         });
+
+        if (reaction && payload.source === 'comment' && payload.githubCommentId) {
+            await addCommentReaction(
+                Number(payload.installationId),
+                payload.repoName,
+                payload.repoOwnerLogin,
+                payload.githubCommentId,
+                reaction,
+            );
+        }
     } catch (error) {
         console.log(`Error ${QUEUE_EVENTS.COMMENT.UNTRACK}:`, error);
         try {
