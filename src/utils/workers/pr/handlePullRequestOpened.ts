@@ -189,6 +189,5 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
                 console.log("Error while logging activity for pull_request.opened:", logError);
             }
         }
-        throw error;
     }
 }
