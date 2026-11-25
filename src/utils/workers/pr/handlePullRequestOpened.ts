@@ -18,7 +18,6 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )
@@ -31,7 +30,6 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
             {
                 installationId: installationRecord._id,
                 githubId: payload.repositoryId,
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         );
@@ -191,6 +189,5 @@ export async function handlePullRequestOpened(payload: PullRequestOpened) {
                 console.log("Error while logging activity for pull_request.opened:", logError);
             }
         }
-        throw error;
     }
 }

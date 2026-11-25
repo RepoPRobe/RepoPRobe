@@ -9,7 +9,6 @@ export async function handlePullRequestUnassigned(payload: PullRequestUnassigned
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

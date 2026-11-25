@@ -13,7 +13,6 @@ export async function handleCommentCheck(payload: CommentCheck) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         );
@@ -26,7 +25,6 @@ export async function handleCommentCheck(payload: CommentCheck) {
             {
                 installationId: installationRecord._id,
                 githubId: payload.repoId,
-                deletedAt: null,
             },
             { _id: 1 },
         );
@@ -51,7 +49,7 @@ export async function handleCommentCheck(payload: CommentCheck) {
         } else if (prRecord?.state === 'closed' || prRecord?.githubClosedAt) {
             message = '### Scan unavailable\n> _This pull request is closed._';
             reaction = 'confused';
-        } else if (!prRecord || prRecord.deletedAt || !prRecord.isTracked) {
+        } else if (!prRecord || !prRecord.isTracked) {
             message = PR_NOT_TRACKED_COMMENT_MARKDOWN;
         }
 

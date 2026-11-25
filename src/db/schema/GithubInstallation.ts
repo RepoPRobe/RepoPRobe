@@ -13,7 +13,6 @@ export interface GithubInstallationType {
     installedBy?: UserType | null;
     suspendedAt?: Date | null;
     installedOn?: Date | null;
-    deletedAt?: Date | null;
     lastUpdatedAt?: Date | null;
     repositorySelection: "all" | "selected";
     createdAt: Date;
@@ -34,7 +33,6 @@ const githubInstallationSchema = new Schema<GithubInstallationType>({
     installedBy: { type: UserSchema, required: false },
     suspendedAt: { type: Date, required: false, default: null },
     installedOn: { type: Date, required: false, default: null },
-    deletedAt: { type: Date, required: false, default: null },
     lastUpdatedAt: { type: Date, required: false, default: null },
     repositorySelection: { type: String, enum: ["all", "selected"], required: true },
 }, { timestamps: true });

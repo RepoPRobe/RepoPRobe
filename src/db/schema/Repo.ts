@@ -7,7 +7,6 @@ export interface RepoType {
     githubId: string;
     githubName: string;
     githubFullName: string;
-    deletedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -18,7 +17,6 @@ const repoSchema = new Schema<RepoType>({
     githubId: { type: String, required: true },
     githubName: { type: String, required: true },
     githubFullName: { type: String, required: true }, // includes user name also: username/repo-name
-    deletedAt: { type: Date, required: false, default: null },
 }, { timestamps: true });
 
 repoSchema.index({ installationId: 1, githubId: 1 }, { unique: true });

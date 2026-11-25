@@ -1,8 +1,9 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
 import { Repo } from "../../../db/schema/Repo.js";
 import { RepoConfig } from "../../../db/schema/RepoConfig.js";
+import { installationQueue } from "../../../queues/installation.queue.js";
 import { QUEUE_EVENTS } from "../../../types/queue-events.js";
-import { InstallationRepositoriesAdded } from "../../../types/queue-payloads.js";
+import { InstallationRepositoriesAdded, InstallationRepositoriesRemoved } from "../../../types/queue-payloads.js";
 import { logActivity } from "../../common/activityLog.js";
 
 export async function handleInstallationRepositoriesAdded(payload: InstallationRepositoriesAdded) {
@@ -31,18 +32,18 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
             const reposToDelete = allRepos.filter(repo => !addedReposGithubIds.includes(repo.githubId));
             const reposToDeleteGithubIds = reposToDelete.map(repo => repo.githubId);
 
-            // no need of await as we are just soft deleting
-            Repo.updateMany(
-                {
-                    installationId: installationDoc._id,
-                    githubId: { $in: reposToDeleteGithubIds },
-                },
-                {
-                    $set: {
-                        deletedAt: new Date(),
-                    }
-                }
-            ).catch(err => console.log("Error while soft deleting repos after installation selection changed to 'selected':", err));
+            if (reposToDeleteGithubIds.length > 0) {
+                await installationQueue.add(
+                    QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED,
+                    {
+                        installationId: payload.installationId,
+                        repositoriesRemoved: reposToDeleteGithubIds.map(id => ({ id })),
+                    } satisfies InstallationRepositoriesRemoved,
+                    {
+                        jobId: `${QUEUE_EVENTS.INSTALLATION_REPOSITORIES.REMOVED}_${payload.installationId}_${reposToDeleteGithubIds.join('_')}`,
+                    },
+                );
+            }
 
             const parentLogId = await logActivity({
                 installationId: installationDoc._id,
@@ -71,23 +72,11 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
                     installationId: installationDoc._id,
                     githubId: { $in: reposToAdd.map(repo => repo.id.toString()) },
                 },
-                { githubId: 1, deletedAt: 1 }
+                { githubId: 1, _id: 1 }
             );
-            const reposToIgnore = new Set<string>();
-            const softDeletedReposIds = existingRepos
-                .filter(repo => {
-                    if (!repo.deletedAt) {
-                        reposToIgnore.add(repo.githubId.toString());
-                    }
-                    return Boolean(repo.deletedAt);
-                })
-                .map(repo => repo.githubId);
-            const reposToRestore = reposToAdd
-                .filter(repo => softDeletedReposIds.includes(repo.id.toString()))
-                .map(repo => repo.id.toString());
-
+            const existingRepoByGithubIds = new Set(existingRepos.map(repo => repo.githubId));
             const reposToCreate = reposToAdd
-                .filter(repo => !softDeletedReposIds.includes(repo.id.toString()) && !reposToIgnore.has(repo.id.toString()))
+                .filter(repo => !existingRepoByGithubIds.has(repo.id))
                 .map(repository => ({
                     installationId: installationDoc._id,
                     installedOn: new Date(),
@@ -96,30 +85,25 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
                     githubFullName: repository.full_name,
                 }));
 
-            const [insertedRepos, restoredRepos] = await Promise.allSettled([
-                reposToCreate.length > 0 ? Repo.insertMany(reposToCreate) : Promise.resolve([]),
-                reposToRestore.length > 0 ? Repo.updateMany(
-                    {
-                        installationId: installationDoc._id,
-                        githubId: { $in: reposToRestore }
-                    },
-                    { $set: { deletedAt: null } },
-                ) : Promise.resolve([]),
-            ]);
+            const insertedRepos = await Repo.insertMany(reposToCreate);
+            const repositoriesToConfigure = [...existingRepos, ...insertedRepos];
+            if (repositoriesToConfigure.length > 0) {
+                const existingRepoConfigs = await RepoConfig.find(
+                    { repoId: { $in: repositoriesToConfigure.map(repo => repo._id) } },
+                    { repoId: 1 },
+                );
+                const configuredRepoIds = new Set(existingRepoConfigs.map(config => config.repoId.toString()));
+                const missingRepoConfigs = repositoriesToConfigure
+                    .filter(repo => !configuredRepoIds.has(repo._id.toString()))
+                    .map(repo => ({ repoId: repo._id }));
 
-            if (insertedRepos.status === 'rejected') {
-                console.log("Error while inserting new repos:", insertedRepos.reason);
-                await logActivity({
-                    installationId: installationDoc._id,
-                    event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED,
-                    status: 'error',
-                    message: 'Failed to insert newly added repositories',
-                });
-            } else {
-                await RepoConfig.insertMany(insertedRepos.value.map(repo => ({
-                    repoId: repo._id,
-                })));
-                await Promise.all(insertedRepos.value.map(repo => logActivity({
+                if (missingRepoConfigs.length > 0) {
+                    await RepoConfig.insertMany(missingRepoConfigs);
+                }
+            }
+
+            if (insertedRepos.length > 0) {
+                await Promise.all(insertedRepos.map(repo => logActivity({
                     installationId: installationDoc._id,
                     repoId: repo._id,
                     event: QUEUE_EVENTS.REPO.ADDED,
@@ -128,36 +112,6 @@ export async function handleInstallationRepositoriesAdded(payload: InstallationR
                 })));
                 console.log(`Inserted ${reposToCreate.length} repos for installation ${payload.installationId}`);
             }
-
-            if (restoredRepos.status === 'rejected') {
-                console.log("Error while restoring soft deleted repos:", restoredRepos.reason);
-                await logActivity({
-                    installationId: installationDoc._id,
-                    event: QUEUE_EVENTS.INSTALLATION_REPOSITORIES.ADDED,
-                    status: 'error',
-                    message: 'Failed to restore previously removed repositories',
-                });
-            } else {
-                const restoredRepoDocs = reposToRestore.length > 0
-                    ? await Repo.find(
-                        {
-                            installationId: installationDoc._id,
-                            githubId: { $in: reposToRestore },
-                        },
-                        { _id: 1, githubFullName: 1 },
-                    )
-                    : [];
-                await Promise.all(restoredRepoDocs.map(repo => logActivity({
-                    installationId: installationDoc._id,
-                    repoId: repo._id,
-                    event: QUEUE_EVENTS.REPO.RESTORED,
-                    status: 'success',
-                    message: `Repository ${repo.githubFullName} restored on installation`,
-                })));
-                console.log(`Restored ${reposToRestore.length} repos for installation ${payload.installationId}`)
-            }
-
-            console.log(`Ignored ${reposToIgnore.size} repos for installation ${payload.installationId} as they were already present and not soft deleted.`);
         }
 
         // update the repositorySelection field in GithubInstallation if it has changed

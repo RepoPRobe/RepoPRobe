@@ -167,10 +167,10 @@ function parseHunkLine(hunkLine: string) {
     const oldFileChanges = parsedHunk[0].split(',');
     const newFileChanges = parsedHunk[1].split(',');
     return {
-        oldFileStartLine: Math.abs(parseInt(oldFileChanges[0])),
-        oldFilePatchLinesCount: parseInt(oldFileChanges[1]),
-        newFileStartLine: Math.abs(parseInt(newFileChanges[0])),
-        newFilePatchLinesCount: parseInt(newFileChanges[1]),
+        oldFileStartLine: Math.abs(parseInt(oldFileChanges[0], 10)),
+        oldFilePatchLinesCount: parseInt(oldFileChanges[1] ?? '1', 10),
+        newFileStartLine: Math.abs(parseInt(newFileChanges[0], 10)),
+        newFilePatchLinesCount: parseInt(newFileChanges[1] ?? '1', 10),
     }
 }
 

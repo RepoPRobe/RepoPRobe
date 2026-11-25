@@ -1,7 +1,9 @@
 import { GithubInstallation } from "../../../db/schema/GithubInstallation.js";
 import { PullRequest } from "../../../db/schema/PullRequest.js";
+import { PullRequestFile } from "../../../db/schema/PullRequestFile.js";
 import { Repo } from "../../../db/schema/Repo.js";
 import { githubApp } from "../../../github/client.js";
+import { processPullRequestFiles } from "../../../github/utils/file-patch.js";
 import { pullRequestQueue } from "../../../queues/pull-request.queue.js";
 import { QUEUE_EVENTS } from "../../../types/queue-events.js";
 import { CommentTrack, PullRequestOpened } from "../../../types/queue-payloads.js";
@@ -14,7 +16,6 @@ export async function handleCommentTrack(payload: CommentTrack) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         );
@@ -27,7 +28,6 @@ export async function handleCommentTrack(payload: CommentTrack) {
             {
                 installationId: installationRecord._id,
                 githubId: payload.repoId,
-                deletedAt: null,
             },
             { _id: 1 }
         );
@@ -42,7 +42,7 @@ export async function handleCommentTrack(payload: CommentTrack) {
             prNumber: payload.prNumber,
         });
 
-        if (!prRecord || prRecord.deletedAt) {
+        if (!prRecord) {
             const octokit = await githubApp.getInstallationOctokit(Number(payload.installationId));
             const { data: pr } = await octokit.rest.pulls.get({
                 owner: payload.repoOwnerLogin,
@@ -73,11 +73,6 @@ export async function handleCommentTrack(payload: CommentTrack) {
                 }
                 console.log(`PR ${payload.prNumber} in repo ${payload.repoName} for installation ${payload.installationId} cannot be tracked:`, message);
                 return;
-            }
-            if (prRecord?.deletedAt) {
-                // if deleted PR record exists, we can delete it and re-add to the queue for processing
-                // this will ensure that we have a fresh PR record data with tracking enabled
-                await PullRequest.deleteOne({ _id: prRecord._id });
             }
 
             await pullRequestQueue.add(QUEUE_EVENTS.PULL_REQUEST.OPENED, {
@@ -160,7 +155,37 @@ export async function handleCommentTrack(payload: CommentTrack) {
             return;
         }
 
-        // At this point, simply mark PR as tracked
+        const octokit = await githubApp.getInstallationOctokit(Number(payload.installationId));
+        const prFiles = await octokit.paginate(
+            octokit.rest.pulls.listFiles,
+            {
+                owner: payload.repoOwnerLogin,
+                repo: payload.repoName,
+                pull_number: payload.prNumber,
+                per_page: 100,
+            }
+        );
+
+        await PullRequestFile.deleteMany({ pullRequestId: prRecord._id });
+        if (prFiles.length > 0) {
+            const convertedPatchObject = processPullRequestFiles(prFiles);
+            await PullRequestFile.insertMany(
+                convertedPatchObject.map(patchObj => ({
+                    pullRequestId: prRecord._id,
+                    file: patchObj.file,
+                    status: patchObj.status,
+                    previousFilePath: patchObj.previousFilePath,
+                    hunks: patchObj.hunks.map(hunk => ({
+                        oldFileStartLine: hunk.oldFileStartLine,
+                        oldFilePatchLinesCount: hunk.oldFilePatchLinesCount,
+                        newFileStartLine: hunk.newFileStartLine,
+                        newFilePatchLinesCount: hunk.newFilePatchLinesCount,
+                        lines: hunk.lines,
+                    }))
+                }))
+            );
+        }
+
         prRecord.isTracked = true;
         await prRecord.save();
 

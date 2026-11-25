@@ -11,7 +11,6 @@ export async function handlePullRequestEdited(payload: PullRequestEdited) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

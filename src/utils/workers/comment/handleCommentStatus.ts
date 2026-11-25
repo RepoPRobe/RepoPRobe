@@ -27,7 +27,6 @@ export async function handleCommentStatus(payload: CommentStatus) {
                 {
                     installationId: payload.installationId,
                     suspendedAt: { $eq: null },
-                    deletedAt: { $eq: null },
                 },
                 { _id: 1 },
             );
@@ -142,9 +141,6 @@ export async function handleCommentStatus(payload: CommentStatus) {
         }
         commentBody.push(`| Created on RepoPRobe | ${formatDate(prRecord.createdAt)} |`);
         commentBody.push(`| Updated on RepoPRobe | ${formatDate(prRecord.updatedAt)} |`);
-        if (prRecord.deletedAt) {
-            commentBody.push(`| Deleted from RepoPRobe | ${formatDate(prRecord.deletedAt)} |`);
-        }
         commentBody.push('</details>');
 
         if (prRecord.conflictState === 'conflicts_found') {

@@ -9,7 +9,6 @@ export async function handlePullRequestLabeled(payload: PullRequestLabeled) {
             {
                 installationId: payload.installationId,
                 suspendedAt: { $eq: null },
-                deletedAt: { $eq: null },
             },
             { _id: 1 },
         )

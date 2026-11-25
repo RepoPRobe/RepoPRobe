@@ -9,7 +9,6 @@ export async function handleInstallationUnsuspend(payload: InstallationUnsuspend
         const githubInstallation = await GithubInstallation.findOneAndUpdate(
             {
                 installationId,
-                deletedAt: { $eq: null },
                 suspendedAt: { $ne: null },
             },
             { $set: { suspendedAt: null } },
