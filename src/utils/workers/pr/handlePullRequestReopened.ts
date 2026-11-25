@@ -35,13 +35,19 @@ export async function handlePullRequestReopened(payload: PullRequestReopened) {
                     githubUpdatedAt: payload.prUpdatedAt,
                 }
             },
-            { projection: { _id: 1, repoId: 1, prNumber: 1 } },
+            { projection: { _id: 1, repoId: 1, prNumber: 1, processingStatus: 1 } },
         );
 
         if (!prRecord) {
             console.log(`No PR record found for installation ${payload.installationId} and PR ${payload.prId}`);
             await handlePullRequestOpened({
                 ...payload,
+                source: 'webhook',
+            });
+        } else if (prRecord.processingStatus !== 'completed') {
+            await handlePullRequestOpened({
+                ...payload,
+                replacementRecordId: prRecord._id.toString(),
                 source: 'webhook',
             });
         } else {
